@@ -9,6 +9,7 @@ def cinematic(cine_1, cine_2=None):
         1: 1, -1: -1, 3: 3, -3: -3,
         "NX": 1, "IX": -1, "DX": 3, "SX": -3,
         "Normal": 1, "Inverse": -1, "Dextral": 3, "Sinestral": -3,
+        "nx": 1, "ix": -1, "dx": 3, "sx": -3
     }
 
     cine_1 = _normalize_cine_value(cine_1)
@@ -101,7 +102,27 @@ def cinematic_array(cine_1, cine_2=None):
 
     return np.array(result)
 
+# CINEMATICA INVERSA
+def cinematic_from_value(valor):
+    """
+    Convierte un valor cinemático compuesto (±2, ±4)
+    en (cine_1, cine_2)
+    """
 
+    if valor == 4:
+        return "Nx", "Dx"
+
+    elif valor == -2:
+        return "Nx", "Sx"
+
+    elif valor == 2:
+        return "Ix", "Dx"
+
+    elif valor == -4:
+        return "Ix", "Sx"
+
+    else:
+        raise ValueError(f"Valor cinemático no invertible: {valor}")
 
 
 

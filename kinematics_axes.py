@@ -6,6 +6,7 @@ import numpy as np
 from . import kinematics_transform
 from . import kinematics_logic
 from . import kinematics_visual
+from . import no_estable
 
 class KinematicAxes(Axes):
     name = 'kinematic'
@@ -547,6 +548,210 @@ class KinematicAxes(Axes):
             alpha=0.5,
             zorder=zorder - 2
         )
+
+# PLOT GENERAL  DESDE ARRAYS
+
+    def plot_fault_N4_caso_3(self, dip, cine_1, cine_2, **kwargs):
+        """
+        Plot especial para N4 caso 3 (sin rake, dos cinemáticas)
+        """
+
+        valor = kinematics_logic.cinematic_array(cine_1, cine_2)
+
+        pts = kinematics_transform.transform_N4_caso_3(dip, valor)
+        if pts is None:
+            return
+
+        x, y = zip(*pts)
+
+        self.plot(
+            x, y,
+            linewidth=2,
+            linestyle="--",
+            **kwargs
+        )
+
+    def plot_fault_N3_caso_1(self, dip, rake, conectar_linea=False, **kwargs):
+        """
+        Plot especial para N3 caso 1
+        """
+
+        pts = kinematics_transform.transform_N3_caso_1(dip, rake)
+        if pts is None:
+            return
+
+        (x1, y1), (x2, y2) = pts
+
+        # ---------------------------
+        # 1️⃣ Puntos huecos
+        # ---------------------------
+        self.scatter(
+            [x1, x2],
+            [y1, y2],
+            s=50,
+            facecolors='none',  # huecos
+            edgecolors='black',
+            zorder=5,
+            **kwargs
+        )
+
+        # ---------------------------
+        # 2️⃣ Línea opcional
+        # ---------------------------
+        if conectar_linea:
+            self.plot(
+                [x1, x2],
+                [y1, y2],
+                linestyle='--',
+                color='black',
+                alpha=0.3,
+                zorder=1
+            )
+
+    def plot_fault_N3_caso_2(self, dip, cine_1, cine_2=None, **kwargs):
+
+        valor = kinematics_logic.cinematic_array(cine_1, cine_2)
+
+        y1 = 1 - dip / 90
+        y2 = -y1
+
+        if valor in (1, -1):  # normal / inversa
+            y = y2 if valor == 1 else y1
+            self.plot([0, 1], [y, y], **kwargs)
+            self.plot([0, -1], [y, y], **kwargs)
+
+        elif valor in (3, -3):  # dextral / sinestral
+            xa = 1 if valor == 3 else -1
+            self.plot([0, xa], [y1, y1], **kwargs)
+            self.plot([0, xa], [y2, y2], **kwargs)
+
+    def plot_fault_N2_caso_1(self, dip, **kwargs):
+        """
+        N2 caso único:
+        - strike + dip
+        - sin rake
+        - sin cinemática
+        - 4 rectas horizontales simétricas
+        """
+
+        x0 = 0
+        xp = 1
+        xn = -1
+
+        y1 = 1 - dip / 90
+        y2 = -y1
+
+        # Todas las líneas comparten los mismos kwargs (color, alpha, lw, etc.)
+        self.plot([x0, xp], [y1, y1], **kwargs)
+        self.plot([x0, xn], [y1, y1], **kwargs)
+
+        self.plot([x0, xp], [y2, y2], **kwargs)
+        self.plot([x0, xn], [y2, y2], **kwargs)
+
+    def plot_fault_N1_caso_unico(self, strike, **kwargs):
+        """
+        N1 caso único:
+        - solo strike
+        - punto sobre el círculo
+        """
+        self.plot_strike(strike, **kwargs)
+
+    def plot_general_faults(self, strike, dip, rake, cine_1, cine_2 = None):
+        faults = no_estable.from_lists(strike, dip, rake, cine_1, cine_2)
+        st, di, rak, cin1, cin2 = no_estable.extract_arrays(faults)
+        registro = no_estable.clasify_for_items(st, di, rak, cin1, cin2)
+        registros_finales = [no_estable.process_registration(r) for r in registro]
+
+        # PARA N5
+        conformes = [r for r in registros_finales if r["estado"] == "conforme"]
+        strike_c = []
+        dip_c = []
+        rake_c = []
+        cine1_c = []
+        cine2_c = []
+
+        for r in conformes:
+            d = r["datos"]
+            strike_c.append(d["strike"])
+            dip_c.append(d["dip"])
+            rake_c.append(d["rake"])
+            cine1_c.append(d["cine_1"])
+            cine2_c.append(d["cine_2"])
+
+        self.plot_fault(
+            strike_c,
+            dip_c,
+            rake_c,
+            cine1_c,
+            cine2_c,
+            color="red",
+            label="Conformes"
+        )
+
+        # caso N4 caso 3
+
+        n4_caso_3 = [
+            r for r in registros_finales
+            if r.get("modo") == "N4_caso_3"
+        ]
+
+        for r in n4_caso_3:
+            d = r["datos"]
+            self.plot_fault_N4_caso_3(
+                dip=d["dip"],
+                cine_1=d["cine_1"],
+                cine_2=d["cine_2"],
+                color="purple",
+                alpha=0.7
+            )
+
+        # caso N3 caso 1
+        n3_caso_1 = [r for r in registros_finales if r.get("modo") == "N3_caso_1"]
+        for r in n3_caso_1:
+            d = r["datos"]
+            self.plot_fault_N3_caso_1(
+                dip=d["dip"],
+                rake=d["rake"],
+                conectar_linea=True  # opcional
+            )
+        n3_caso_2 = [r for r in registros_finales if r.get("modo") == "N3_caso_2"]
+
+        for r in n3_caso_2:
+            d = r["datos"]
+            self.plot_fault_N3_caso_2(
+                dip=d["dip"],
+                cine_1=d["cine_1"],
+                cine_2=d["cine_2"],
+                color="red",
+                linestyle="--",
+                alpha=0.8
+            )
+
+        n2 = [r for r in registros_finales if r.get("modo") == "N2_caso_unico"]
+
+        for r in n2:
+            d = r["datos"]
+            self.plot_fault_N2_caso_1(
+                dip=d["dip"],
+                color="gray",
+                linestyle="--",
+                linewidth=1.5,
+                alpha=0.8
+            )
+        # caso N1
+        n1 = [r for r in registros_finales if r.get("modo") == "N1_caso_unico"]
+
+        for r in n1:
+            d = r["datos"]
+            self.plot_fault_N1_caso_unico(
+                strike=d["strike"],
+                s=100,
+                facecolors="none",  # hueco
+                edgecolors="black",
+                alpha=0.6
+            )
+
+
 
 # Registrar el Axes
 register_projection(KinematicAxes)
