@@ -4,8 +4,12 @@ from matplotlib.patches import Circle
 import numpy as np
 
 from . import kinematics_transform
+
 from . import kinematics_logic
 from . import kinematics_visual
+from . import kinematics_norm
+from . import kinematics_math
+
 
 
 class KinematicAxes(Axes):
@@ -206,7 +210,7 @@ class KinematicAxes(Axes):
         cine_1 = np.atleast_1d(cine_1)
         cine_2 = np.atleast_1d(cine_2) if cine_2 is not None else None
 
-        x, y = kinematics_transform.dip_rake_to_xy(dip, rake, cine_1, cine_2)
+        x, y = kinematics_math.dip_rake_to_xy(dip, rake, cine_1, cine_2)
         valor_cinematic = kinematics_logic._cinematic_main(cine_1, cine_2)
 
         for xi, yi, d, vc in zip(x, y, dip, valor_cinematic):
@@ -228,7 +232,7 @@ class KinematicAxes(Axes):
 
     def plot_strike(self, strike, r=1.5, **kwargs):
 
-        x, y = kinematics_transform.strike_to_xy(strike, r)
+        x, y = kinematics_math.strike_to_xy(strike, r)
 
         self.scatter(
             x, y,
@@ -262,8 +266,8 @@ class KinematicAxes(Axes):
             # ----------------------------------
             # Coordenadas
             # ----------------------------------
-            x1, y1 = kinematics_transform.strike_to_xy(s)
-            x0, y0 = kinematics_transform.dip_rake_to_xy(d, r, c1, c2)
+            x1, y1 = kinematics_math.strike_to_xy(s)
+            x0, y0 = kinematics_math.dip_rake_to_xy(d, r, c1, c2)
 
             # ----------------------------------
             # Línea conectora
@@ -323,7 +327,7 @@ class KinematicAxes(Axes):
         # Coordenadas de la secuencia
         coords = []
         for i in indices:
-            x, y = kinematics_transform.dip_rake_to_xy(
+            x, y = kinematics_math.dip_rake_to_xy(
                 dip[i], rake[i], cine_1[i], cine_2[i]
             )
             coords.append((x, y))
@@ -361,7 +365,7 @@ class KinematicAxes(Axes):
         # ------------------------------
         XY = []
         for d, r, c1, c2 in zip(dip, rake, cine_1, cine_2):
-            x, y = kinematics_transform.dip_rake_to_xy(d, r, c1, c2)
+            x, y = kinematics_math.dip_rake_to_xy(d, r, c1, c2)
             XY.append((x, y))
 
         # ------------------------------
@@ -426,7 +430,7 @@ class KinematicAxes(Axes):
         kin_coords = []
 
         for d, r, c1, c2 in zip(dip, rake, cine_1, cine_2):
-            x, y = kinematics_transform.dip_rake_to_xy(d, r, c1, c2)
+            x, y = kinematics_math.dip_rake_to_xy(d, r, c1, c2)
             kin_coords.append((x, y))
 
             # Punto siempre
@@ -466,7 +470,7 @@ class KinematicAxes(Axes):
         strike_coords = []
 
         for s in strike:
-            xs, ys = kinematics_transform.strike_to_xy(s)
+            xs, ys = kinematics_math.strike_to_xy(s)
             strike_coords.append((xs, ys))
 
             # Punto siempre
@@ -558,7 +562,7 @@ class KinematicAxes(Axes):
 
         valor = kinematics_logic.cinematic_array(cine_1, cine_2)
 
-        pts = kinematics_transform.transform_N4_caso_3(dip, valor)
+        pts = kinematics_math.transform_N4_caso_3(dip, valor)
         if pts is None:
             return
 
@@ -576,7 +580,7 @@ class KinematicAxes(Axes):
         Plot especial para N3 caso 1
         """
 
-        pts = kinematics_transform.transform_N3_caso_1(dip, rake)
+        pts = kinematics_math.transform_N3_caso_1(dip, rake)
         if pts is None:
             return
 
@@ -657,8 +661,8 @@ class KinematicAxes(Axes):
         self.plot_strike(strike, **kwargs)
 
     def plot_general_faults(self, strike, dip, rake, cine_1, cine_2 = None):
-        faults = kinematics_logic.from_lists(strike, dip, rake, cine_1, cine_2)
-        st, di, rak, cin1, cin2 = kinematics_logic.extract_arrays(faults)
+        faults = kinematics_norm.from_lists(strike, dip, rake, cine_1, cine_2)
+        st, di, rak, cin1, cin2 = kinematics_norm.extract_arrays(faults)
         registro = kinematics_logic.clasify_for_items(st, di, rak, cin1, cin2)
         registros_finales = [kinematics_logic.process_registration(r) for r in registro]
 

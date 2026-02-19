@@ -1,5 +1,4 @@
 import numpy as np
-from GOBESTEREONET import GobFallas2 as gf2
 
 
 def cinematic(cine_1, cine_2=None):
