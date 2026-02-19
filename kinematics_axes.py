@@ -6,7 +6,7 @@ import numpy as np
 from . import kinematics_transform
 from . import kinematics_logic
 from . import kinematics_visual
-from . import no_estable
+
 
 class KinematicAxes(Axes):
     name = 'kinematic'
@@ -657,10 +657,10 @@ class KinematicAxes(Axes):
         self.plot_strike(strike, **kwargs)
 
     def plot_general_faults(self, strike, dip, rake, cine_1, cine_2 = None):
-        faults = no_estable.from_lists(strike, dip, rake, cine_1, cine_2)
-        st, di, rak, cin1, cin2 = no_estable.extract_arrays(faults)
-        registro = no_estable.clasify_for_items(st, di, rak, cin1, cin2)
-        registros_finales = [no_estable.process_registration(r) for r in registro]
+        faults = kinematics_logic.from_lists(strike, dip, rake, cine_1, cine_2)
+        st, di, rak, cin1, cin2 = kinematics_logic.extract_arrays(faults)
+        registro = kinematics_logic.clasify_for_items(st, di, rak, cin1, cin2)
+        registros_finales = [kinematics_logic.process_registration(r) for r in registro]
 
         # PARA N5
         conformes = [r for r in registros_finales if r["estado"] == "conforme"]

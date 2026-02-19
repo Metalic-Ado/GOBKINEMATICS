@@ -4,7 +4,7 @@ from . import kinematics_math
 
 def _rake_to_x(dip, rake, valor_cinematic):
 
-    kinematics_logic._validate_rake( rake, valor_cinematic)
+    kinematics_logic._validate_rake(rake, valor_cinematic)
 
     mag = kinematics_math.changes_magnitud_rake(dip, rake, valor_cinematic)
 
