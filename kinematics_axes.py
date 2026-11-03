@@ -3,7 +3,6 @@ from matplotlib.projections import register_projection
 from matplotlib.patches import Circle
 import numpy as np
 
-from . import kinematics_transform
 
 from . import kinematics_logic
 from . import kinematics_visual
@@ -13,15 +12,19 @@ from . import kinematics_math
 
 
 class KinematicAxes(Axes):
-    name = 'kinematic'
+    name = "kinematic"
+
+    # Constantes geométricas del gráfico
+    KINEMATIC_RADIUS = 1.0
+    STRIKE_RADIUS = 1.5
+    AXIS_LIMIT = 1.6
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-
-        # Límites internos
-        self.set_xlim(-1.6, 1.6)
-        self.set_ylim(-1.6, 1.6)
+        # Límites del gráfico
+        self.set_xlim(-self.AXIS_LIMIT, self.AXIS_LIMIT)
+        self.set_ylim(-self.AXIS_LIMIT, self.AXIS_LIMIT)
 
         # Relación 1:1
         self.set_aspect("equal", adjustable="box")
@@ -29,6 +32,7 @@ class KinematicAxes(Axes):
         # Ocultar ejes normales
         self.set_xticks([])
         self.set_yticks([])
+
         for spine in self.spines.values():
             spine.set_visible(False)
 
@@ -39,46 +43,73 @@ class KinematicAxes(Axes):
         self._draw_rake_scale_right()
         self._draw_rake_scale_left()
         self._draw_strike_ring()
-        self._draw_limit_squeare()
-
+        self._draw_limit_square()
 
     # -------------------------
     # Dibujo de la cruz central
     # -------------------------
 
     def _draw_cross(self):
-        R = 1.0  # radio cinemático base
+        R = self.KINEMATIC_RADIUS
 
-        # Horizontal (Dip)
-        self.plot([-R, R], [0, 0], color="black", lw=1.5)
+        # Horizontal
+        self.plot(
+            [-R, R], [0, 0],
+            color="black",
+            lw=1.5
+        )
 
-        # Vertical (Rake)
-        self.plot([0, 0], [-R, R], color="black", lw=1.5)
+        # Vertical
+        self.plot(
+            [0, 0], [-R, R],
+            color="black",
+            lw=1.5
+        )
     # -------------------------
     # Etiquetas cinemáticas
     # -------------------------
     def _draw_labels(self):
-        offset = 0.1 # de las etiquetas Ix, Sx etc
+        R = self.KINEMATIC_RADIUS
+        offset = 0.1
 
-        # Horizontal (dip)
-        self.text(1 + offset, 0, "Dx", ha="left", va="center", fontsize=15,
-                  fontweight="bold",fontfamily="serif")
-        self.text(-1 - offset, 0, "Sx", ha="right", va="center", fontsize=15,
-                  fontweight="bold",fontfamily="serif")
+        # Horizontal
+        self.text(
+            R + offset, 0, "Dx",
+            ha="left", va="center",
+            fontsize=15, fontweight="bold",
+            fontfamily="serif"
+        )
 
-        # Vertical (rake)
-        self.text(0, 1 + offset, "Ix", ha="center", va="bottom", fontsize=15,
-                  fontweight="bold",fontfamily="serif")
-        self.text(0, -1 - offset, "Nx", ha="center", va="top", fontsize=15,
-                  fontweight="bold",fontfamily="serif")
+        self.text(
+            -R - offset, 0, "Sx",
+            ha="right", va="center",
+            fontsize=15, fontweight="bold",
+            fontfamily="serif"
+        )
+
+        # Vertical
+        self.text(
+            0, R + offset, "Ix",
+            ha="center", va="bottom",
+            fontsize=15, fontweight="bold",
+            fontfamily="serif"
+        )
+
+        self.text(
+            0, -R - offset, "Nx",
+            ha="center", va="top",
+            fontsize=15, fontweight="bold",
+            fontfamily="serif"
+        )
 
     def _draw_dip_scale(self):
         dips = [0, 30, 60, 90]
+        R = self.KINEMATIC_RADIUS
         x_text = -0.06
         dt = 0.04
 
         for dip in dips:
-            y = 1 - dip / 90
+            y = R * (1 - dip / 90)
 
             # Tick superior (Ix)
             self.plot(
@@ -87,6 +118,7 @@ class KinematicAxes(Axes):
                 color="black",
                 lw=1
             )
+
             self.text(
                 x_text, y, f"{dip}°",
                 ha="right", va="center", fontsize=9
@@ -100,6 +132,7 @@ class KinematicAxes(Axes):
                     color="black",
                     lw=1
                 )
+
                 self.text(
                     x_text, -y, f"{dip}°",
                     ha="right", va="center", fontsize=9
@@ -111,21 +144,61 @@ class KinematicAxes(Axes):
             ha="right", va="center", fontsize=9,
             fontfamily="serif", alpha=0.8, rotation=90
         )
+
         self.text(
             x_text - 0.01, 0.835, "Dip",
             ha="right", va="center", fontsize=9,
             fontfamily="serif", alpha=0.8, rotation=90
         )
 
+    def _draw_strike_ring(self):
+        r = self.STRIKE_RADIUS
+
+        circle = Circle(
+            (0, 0), r,
+            fill=False,
+            lw=1,
+            color="black"
+        )
+        self.add_patch(circle)
+
+        labels = {
+            0: (0, r + 0.06, "0°"),
+            90: (r + 0.06, 0, "90°"),
+            180: (0, -r - 0.06, "180°"),
+            270: (-r - 0.08, 0, "270°"),
+        }
+
+        for _, (x, y, txt) in labels.items():
+            self.text(
+                x, y, txt,
+                ha="center", va="center", fontsize=9
+            )
+
+    def _draw_limit_square(self):
+        R = self.KINEMATIC_RADIUS
+
+        square_x = [-R, R, R, -R, -R]
+        square_y = [-R, -R, R, R, -R]
+
+        self.plot(
+            square_x,
+            square_y,
+            color="black",
+            linewidth=1,
+            linestyle="--",
+            alpha=0.7
+        )
+
     def _draw_rake_scale_right(self):
         rakes = [0, 30, 60, 120, 150, 180]
         y_text = 0.06
-        dt = 0.04  # largo del tick
+        dt = 0.04
 
         for rake in rakes:
             x = -(rake - 90) / 90
 
-            # Tick horizontal (perpendicular al eje vertical)
+            # Tick horizontal hacia abajo
             self.plot(
                 [x, x],
                 [-dt, 0],
@@ -133,14 +206,20 @@ class KinematicAxes(Axes):
                 lw=1
             )
 
-            # Texto
+            # Texto de la escala
             self.text(
                 x, y_text, f"{rake}º",
-                ha="center", va="bottom", fontsize=9
+                ha="center",
+                va="bottom",
+                fontsize=9
             )
 
         self.text(
-             -0.9, y_text + 0.01, "Rake" , ha="left", va="center", fontsize=9, alpha=0.7
+            -0.9, y_text + 0.01, "Rake",
+            ha="left",
+            va="center",
+            fontsize=9,
+            alpha=0.7
         )
 
     def _draw_rake_scale_left(self):
@@ -151,7 +230,7 @@ class KinematicAxes(Axes):
         for rake in rakes:
             x = (rake - 90) / 90
 
-            # Tick horizontal hacia la izquierda
+            # Tick horizontal hacia arriba
             self.plot(
                 [x, x],
                 [0, dt],
@@ -159,152 +238,266 @@ class KinematicAxes(Axes):
                 lw=1
             )
 
+            # Texto de la escala
             self.text(
                 x, y_text, f"{rake}º",
-                ha="center", va="top", fontsize=9
+                ha="center",
+                va="top",
+                fontsize=9
             )
 
         self.text(
-             0.815, y_text-0.03, "Rake", ha="center", va="bottom", fontsize=9, alpha=0.7
-        )
-
-    # grafico del circulo
-    def _draw_strike_ring(self, r=1.5): # con 1.42 queda
-        circle = Circle(
-            (0, 0), r,
-            fill=False,
-            lw=1,
-            color="black",
-        )
-        self.add_patch(circle)
-
-        # Etiquetas principales
-        labels = {
-            0: (0, r + 0.06, "0°"),
-            90: (r + 0.06, 0, "90°"),
-            180: (0, -r - 0.06, "180°"),
-            270: (-r - 0.08, 0, "270°"),
-        }
-
-        for _, (x, y, txt) in labels.items():
-            self.text(x, y, txt, ha="center", va="center", fontsize=9)
-
-    # en el cuadrado se encuentran los casos especiales
-    def _draw_limit_squeare(self, r=1.0):
-        square_x = [-r, r, r, -r, -r]
-        square_y = [-r, -r, r, r, -r]
-
-        self.plot(
-            square_x,
-            square_y,
-            color='black',
-            linewidth=1,
-            linestyle='--',
+            0.815, y_text - 0.03, "Rake",
+            ha="center",
+            va="bottom",
+            fontsize=9,
             alpha=0.7
         )
+########################################################################################################################
+############################################### PLOT DE LOS DATOS ######################################################
+# CREO QUE ES MEJOR SEPARAR Y LUEGO UNIR
+# PLOTEAR EL PUNTO DE DIP AND RAKE
+# PLOTEAR EL PUNTO DE STRIKE
+# PLOTEO DE LOS LA UNION DEL DIPRAKE AND STRIKE
+# PLOTEO DE LA UNION DE DOS PUNTOS RAKE DIP MEDIANTE LINEA
+# PLOTEO DE LA UNION DE DOS PUNTOS DE STRIKES MEDIANTE LINEA
+# PLOTEO DE LA UNION DE MAS DE DOS PUNTOS DE RAKE AN DIPS
+# PLOTEO DE LA UNION DE MAS DE DOS PUNTOS DE STRIKES
+# PLOTEO SEGUN LA CLASIFICACION GENERAL
+# si los valores None para numeros es mejor np.Nan
 
-    def plot_kinematic(self, dip, rake, cine_1, cine_2=None, **kwargs):
 
-        dip = np.atleast_1d(dip)
-        rake = np.atleast_1d(rake)
-        cine_1 = np.atleast_1d(cine_1)
-        cine_2 = np.atleast_1d(cine_2) if cine_2 is not None else None
+    # ==========================================================
+    # PLOT PRINCIPAL DE FALLAS
+    # ==========================================================
 
-        x, y = kinematics_math.dip_rake_to_xy(dip, rake, cine_1, cine_2)
-        valor_cinematic = kinematics_logic._cinematic_main(cine_1, cine_2)
+    def _draw_kinematic_point(
+            self,
+            x,
+            y,
+            dip,
+            valor_cinematic,
+            **kwargs
+    ):
+        """
+        Dibuja únicamente el punto cinemático.
+        """
 
-        for xi, yi, d, vc in zip(x, y, dip, valor_cinematic):
+        # Caso especial: falla vertical
+        if dip == 90:
 
-            # -----------------------------
-            # Caso límite: dip = 90
-            # -----------------------------
-            if d == 90:
-                if vc in (-1, 2, -4):  # Ix
-                    marker = kinematics_visual.half_circle_marker(upper=True)
-                elif vc in (1, -2, 4):  # Nx
-                    marker = kinematics_visual.half_circle_marker(upper=False)
-                else:
-                    marker = "o"
+            # Inversa
+            if valor_cinematic in (-1, 2, -4):
+                marker = kinematics_visual.half_circle_marker(
+                    upper=True
+                )
+
+            # Normal
+            elif valor_cinematic in (1, -2, 4):
+                marker = kinematics_visual.half_circle_marker(
+                    upper=False
+                )
+
             else:
                 marker = "o"
 
-            self.scatter(xi, yi, marker=marker, **kwargs)
+        else:
+            marker = "o"
 
-    def plot_strike(self, strike, r=1.5, **kwargs):
-
-        x, y = kinematics_math.strike_to_xy(strike, r)
-
-        self.scatter(
-            x, y,
+        return self.scatter(
+            x,
+            y,
+            marker=marker,
             **kwargs
         )
 
+
+    def _draw_strike_point(
+            self,
+            x,
+            y,
+            **kwargs
+    ):
+        """
+        Dibuja únicamente el punto correspondiente al strike.
+        """
+
+        return self.scatter(
+            x,
+            y,
+            marker="x",
+            **kwargs
+        )
+
+
+    def _draw_connector(
+            self,
+            x1,
+            y1,
+            x2,
+            y2,
+            **kwargs
+    ):
+        """
+        Dibuja la conexión entre el punto de strike
+        y el punto cinemático.
+        """
+
+        return self.plot(
+            [x1, x2],
+            [y1, y2],
+            **kwargs
+        )
+
+
     def plot_fault(
             self,
-            strike, dip, rake,
-            cine_1, cine_2=None,
+            strike,
+            dip,
+            rake,
+            cine_1,
+            cine_2=None,
             show_strike=True,
             show_connector=True,
             **kwargs
     ):
+        """
+        Grafica fallas completas.
 
+        Entrada pública para el usuario/geólogo:
 
-        strike, dip, rake, cine_1, cine_2 = np.atleast_1d(
-            strike, dip, rake, cine_1, cine_2
+            strike
+            dip
+            rake
+            cine_1
+            cine_2
+
+        El usuario no necesita conocer valor_cinematic.
+        """
+
+        # ======================================================
+        # 1. NORMALIZACIÓN BÁSICA
+        # ======================================================
+
+        data = kinematics_norm.normalize_basic_data(
+            strike=strike,
+            dip=dip,
+            rake=rake,
+            cine_1=cine_1,
+            cine_2=cine_2
         )
 
 
-        for s, d, r, c1, c2 in zip(strike, dip, rake, cine_1, cine_2):
+        # ======================================================
+        # 2. VALIDACIÓN GEOMÉTRICA
+        # ======================================================
 
-            # ----------------------------------
-            # Color único por falla
-            # ----------------------------------
-            color = kwargs.get("color", None)
-            if color is None:
-                color = np.random.rand(3, )
+        data = kinematics_logic.validate_complete_faults(
+            data
+        )
 
-            # ----------------------------------
-            # Coordenadas
-            # ----------------------------------
-            x1, y1 = kinematics_math.strike_to_xy(s)
-            x0, y0 = kinematics_math.dip_rake_to_xy(d, r, c1, c2)
 
-            # ----------------------------------
-            # Línea conectora
-            # ----------------------------------
+        # ======================================================
+        # 3. OPCIONES DE DIBUJO
+        # ======================================================
+
+        color = kwargs.pop("color", "black")
+
+        zorder = kwargs.pop("zorder", 4)
+
+        point_kwargs = {
+            **kwargs,
+            "color": color,
+            "zorder": zorder
+        }
+
+
+        # ======================================================
+        # 4. GRAFICAR CADA FALLA
+        # ======================================================
+
+        for (
+            s,
+            d,
+            r,
+            c1,
+            c2,
+            vc
+        ) in zip(
+            data["strike"],
+            data["dip"],
+            data["rake"],
+            data["cine_1"],
+            data["cine_2"],
+            data["valor_cinematic"]
+        ):
+
+            # --------------------------------------------------
+            # Coordenadas del STRIKE
+            # --------------------------------------------------
+
+            x_strike, y_strike = (
+                kinematics_math.strike_to_xy(s)
+            )
+
+            # --------------------------------------------------
+            # Coordenadas DIP-RAKE
+            # --------------------------------------------------
+
+            x_kin, y_kin = (
+                kinematics_math.dip_rake_to_xy(
+                    d,
+                    r,
+                    vc
+                )
+            )
+
+
+            # ==================================================
+            # CONECTOR
+            # ==================================================
+
             if show_connector:
-                self.plot(
-                    (x0, x1), (y0, y1),
+
+                self._draw_connector(
+                    x_strike,
+                    y_strike,
+                    x_kin,
+                    y_kin,
                     color="black",
                     linewidth=0.5,
-                    linestyle=':',
+                    linestyle=":",
                     alpha=0.5,
                     zorder=1
                 )
 
-            # ----------------------------------
-            # Strike
-            # ----------------------------------
+
+            # ==================================================
+            # PUNTO STRIKE
+            # ==================================================
+
             if show_strike:
-                self.plot_strike(
-                    s,
-                    r=1.5,
-                    color=color,
-                    marker='x',  # 👈 símbolo distinto
-                    s=100,
-                    zorder=3,
-                    **{k: v for k, v in kwargs.items() if k != "color"}
+
+                self._draw_strike_point(
+                    x_strike,
+                    y_strike,
+                    **point_kwargs
                 )
 
-            # ----------------------------------
-            # Punto cinemático
-            # ----------------------------------
-            self.plot_kinematic(
-                d, r, c1, c2,
-                color=color,
-                zorder=4,
-                **{k: v for k, v in kwargs.items() if k != "color"}
+
+            # ==================================================
+            # PUNTO CINEMÁTICO
+            # ==================================================
+
+            self._draw_kinematic_point(
+                x_kin,
+                y_kin,
+                d,
+                vc,
+                **point_kwargs
             )
+
+
 
     # TEMPORALIDAD
     def plot_fault_temporality(
@@ -613,21 +806,17 @@ class KinematicAxes(Axes):
             )
 
     def plot_fault_N3_caso_2(self, dip, cine_1, cine_2=None, **kwargs):
-
         valor = kinematics_logic.cinematic_array(cine_1, cine_2)
+        valor = int(valor[0])
 
-        y1 = 1 - dip / 90
-        y2 = -y1
+        segmentos = kinematics_math.transform_N3_case2(dip, valor)
 
-        if valor in (1, -1):  # normal / inversa
-            y = y2 if valor == 1 else y1
-            self.plot([0, 1], [y, y], **kwargs)
-            self.plot([0, -1], [y, y], **kwargs)
+        if segmentos is None:
+            return
 
-        elif valor in (3, -3):  # dextral / sinestral
-            xa = 1 if valor == 3 else -1
-            self.plot([0, xa], [y1, y1], **kwargs)
-            self.plot([0, xa], [y2, y2], **kwargs)
+        for segmento in segmentos:
+            x, y = zip(*segmento)
+            self.plot(x, y, **kwargs)
 
     def plot_fault_N2_caso_1(self, dip, **kwargs):
         """
@@ -655,16 +844,40 @@ class KinematicAxes(Axes):
     def plot_fault_N1_caso_unico(self, strike, **kwargs):
         """
         N1 caso único:
-        - solo strike
-        - punto sobre el círculo
+        - Solo strike.
+        - Punto sobre el círculo.
         """
-        self.plot_strike(strike, **kwargs)
+        x, y = kinematics_math.strike_to_xy(strike)
+
+        return self._draw_strike_point(
+            x,
+            y,
+            **kwargs
+        )
 
     def plot_general_faults(self, strike, dip, rake, cine_1, cine_2 = None):
         faults = kinematics_norm.from_lists(strike, dip, rake, cine_1, cine_2)
         st, di, rak, cin1, cin2 = kinematics_norm.extract_arrays(faults)
         registro = kinematics_logic.clasify_for_items(st, di, rak, cin1, cin2)
         registros_finales = [kinematics_logic.process_registration(r) for r in registro]
+
+        # STRIKE: representar todos los registros que lo tengan
+        for r in registros_finales:
+            d = r["datos"]
+            strike = d.get("strike")
+
+            if strike is None:
+                continue
+
+            x, y = kinematics_math.strike_to_xy(strike)
+
+            self._draw_strike_point(
+                x,
+                y,
+                color="black",
+                alpha=0.6,
+                zorder=4
+            )
 
         # PARA N5
         conformes = [r for r in registros_finales if r["estado"] == "conforme"]
@@ -737,7 +950,7 @@ class KinematicAxes(Axes):
             d = r["datos"]
             self.plot_fault_N2_caso_1(
                 dip=d["dip"],
-                color="gray",
+                color="red",
                 linestyle="--",
                 linewidth=1.5,
                 alpha=0.8

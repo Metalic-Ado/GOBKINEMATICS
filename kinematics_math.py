@@ -1,6 +1,8 @@
 import numpy as np
 from . import kinematics_logic
 
+import numpy as np
+
 
 def changes_magnitud_rake(dip, rake, valor_cinematic):
     # Caso vertical puro
@@ -19,91 +21,181 @@ def changes_magnitud_rake(dip, rake, valor_cinematic):
             return 1.0 - (180.0 - rake) / 90.0
 
     # Casos oblicuos dip–slip
-    if valor_cinematic in (2, -2):  # 0–90
+    if valor_cinematic in (2, -2):
         return 1.0 - (rake / 90.0)
 
-    elif valor_cinematic in (4, -4):  # 90–180
+    elif valor_cinematic in (4, -4):
         return 1.0 - (180.0 - rake) / 90.0
+
+    return 0.0
 
 
 def _rake_to_x(dip, rake, valor_cinematic):
 
-    kinematics_logic._validate_rake(rake, valor_cinematic)
+    mag = changes_magnitud_rake(
+        dip,
+        rake,
+        valor_cinematic
+    )
 
-    mag = changes_magnitud_rake(dip, rake, valor_cinematic)
-
-    # Sx → izquierda
+    # Sinestral / componente negativa
     if valor_cinematic < 0:
         return -mag
 
-    # Dx → derecha
+    # Dextral / componente positiva
     return +mag
+
 
 def _dip_to_y(dip, rake, valor_cinematic):
 
+    y_mag = 1 - dip / 90
 
-    y_mag = 1 - dip / 90 # formula de conversion
-# caso donde rake es 180 y 0
-    if  valor_cinematic > 0:
+    # ---------------------------------------------
+    # Rake = 0° o 180°
+    # ---------------------------------------------
+
+    if valor_cinematic > 0:
+
         if rake == 180:
             return -y_mag
+
         elif rake == 0:
             return y_mag
+
     elif valor_cinematic < 0:
+
         if rake == 180:
             return y_mag
+
         elif rake == 0:
             return -y_mag
 
-#dip igual a 0
+    # ---------------------------------------------
+    # Dip = 0°
+    # Caso especial
+    # ---------------------------------------------
+
     if dip == 0:
 
-        if valor_cinematic > 0:  # Nx
+        if valor_cinematic > 0:
             return y_mag if rake < 90 else -y_mag
 
-        if valor_cinematic < 0:  # Sx
+        if valor_cinematic < 0:
             return -y_mag if rake < 90 else +y_mag
 
+        # valor_cinematic = 0
+        return 0.0
+
+    # ---------------------------------------------
+    # Orientación vertical del movimiento
+    # ---------------------------------------------
 
     # Ix arriba | Nx abajo
-    if valor_cinematic in (-1, 2, -4):# Ix, SxIx and IxDx inicia c ontar desde arria osea desde +1
+    if valor_cinematic in (-1, 2, -4):
         return +y_mag
-    # si no se cumple esto inicia a contar desde abajo o desde -1
+
+    # Los demás
     return -y_mag
 
-def dip_rake_to_xy(dip, rake, cine_1, cine_2=None):
-    dip, rake, cine_1, cine_2 = np.atleast_1d(dip, rake, cine_1, cine_2)
 
-    valor_cinematic = kinematics_logic._cinematic_main(cine_1, cine_2)
+def dip_rake_to_xy(dip, rake, valor_cinematic):
+    """
+    Calcula X,Y a partir de datos geométricos
+    previamente validados.
 
+    Parámetros
+    ----------
+    dip : escalar o secuencia
+    rake : escalar o secuencia
+    valor_cinematic : escalar o secuencia
 
-    # -----------------
-    # DIP → Y
-    # -----------------
-    xs, ys = [], []
-    for d, r, vc in zip(dip, rake, valor_cinematic):
-        y = _dip_to_y(d, r, vc)
-        ys.append(y)
-    # -----------------
-    # RAKE → X (ida y vuelta)
-    # -----------------
+    Returns
+    -------
+    x, y : numpy.ndarray
+    """
 
-        x = _rake_to_x(d, r, vc)
+    dip = np.atleast_1d(dip)
+    rake = np.atleast_1d(rake)
+    valor_cinematic = np.atleast_1d(valor_cinematic)
+
+    # ---------------------------------------------
+    # Comprobar longitud
+    # ---------------------------------------------
+
+    if not (
+        len(dip)
+        == len(rake)
+        == len(valor_cinematic)
+    ):
+        raise ValueError(
+            "dip, rake y valor_cinematic deben "
+            "tener la misma cantidad de elementos."
+        )
+
+    xs = []
+    ys = []
+
+    for d, r, vc in zip(
+        dip,
+        rake,
+        valor_cinematic
+    ):
+
+        y = _dip_to_y(
+            d,
+            r,
+            vc
+        )
+
+        x = _rake_to_x(
+            d,
+            r,
+            vc
+        )
+
         xs.append(x)
+        ys.append(y)
 
     return np.array(xs), np.array(ys)
 
+
 def strike_to_xy(strike, r=1.5):
+
     strike = np.atleast_1d(strike)
 
     if np.any((strike < 0) | (strike >= 360)):
-        raise ValueError("Strike debe estar entre 0 y 360")
+        raise ValueError(
+            "Strike debe estar entre 0 y 360"
+        )
 
     theta = np.radians(90 - strike)
+
     x = r * np.cos(theta)
     y = r * np.sin(theta)
 
     return x, y
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #caso 3
 def transform_N4_caso_3(dip, valor_cinematico):
