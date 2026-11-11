@@ -83,3 +83,24 @@ def _apply_offset_if_overlap(x0, y0, x1, y1, offset_mag=0.02):
     ox, oy = offset_mag * n
 
     return x0 + ox, y0 + oy, x1 + ox, y1 + oy
+
+def strike_only_marker():
+    """
+    Retorna un marcador compuesto:
+    X dentro de un círculo.
+
+    Identifica estructuras que solamente
+    contienen información de strike (N1).
+    """
+
+    circle = Path.unit_circle()
+
+    x_verts = np.array([
+        [-0.65, -0.65],
+        [0.65, 0.65],
+        [np.nan, np.nan],
+        [-0.65, 0.65],
+        [0.65, -0.65]
+    ])
+
+    return circle, x_verts

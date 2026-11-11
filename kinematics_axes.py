@@ -4,7 +4,6 @@ from matplotlib.patches import Circle
 import numpy as np
 
 
-from . import kinematics_logic
 from . import kinematics_visual
 from . import kinematics_norm
 from . import kinematics_math
@@ -328,7 +327,58 @@ class KinematicAxes(Axes):
             marker="x",
             **kwargs
         )
+    # PARA EL STRIKE
+    def _draw_strike_only_marker(
+            self,
+            x,
+            y,
+            size=0.025,
+            **kwargs
+    ):
+        """
+        Dibuja el símbolo N1:
+        círculo con una X interior.
+        """
 
+        color = kwargs.get("color", "black")
+        alpha = kwargs.get("alpha", 1.0)
+        zorder = kwargs.get("zorder", 4)
+        linewidth = kwargs.get("linewidth", 1.2)
+
+        # Círculo exterior
+        circle = Circle(
+            (x, y),
+            radius=size,
+            fill=False,
+            edgecolor=color,
+            linewidth=linewidth,
+            alpha=alpha,
+            zorder=zorder
+        )
+
+        self.add_patch(circle)
+
+        # X interior
+        x_verts = np.array([
+            [-0.65, -0.65],
+            [0.65, 0.65],
+            [np.nan, np.nan],
+            [-0.65, 0.65],
+            [0.65, -0.65]
+        ])
+
+        x_verts = x_verts * size
+
+        self.plot(
+            x + x_verts[:, 0],
+            y + x_verts[:, 1],
+            color=color,
+            alpha=alpha,
+            linewidth=linewidth,
+            zorder=zorder
+        )
+
+        return circle
 
     def _draw_connector(
             self,
@@ -343,12 +393,17 @@ class KinematicAxes(Axes):
         y el punto cinemático.
         """
 
+        kwargs.setdefault("color", "gray")
+        kwargs.setdefault("alpha", 0.25)
+        kwargs.setdefault("linewidth", 0.7)
+        kwargs.setdefault("linestyle", "-")
+        kwargs.setdefault("zorder", 1)
+
         return self.plot(
             [x1, x2],
             [y1, y2],
             **kwargs
         )
-
 
     def plot_fault(
             self,
@@ -362,24 +417,30 @@ class KinematicAxes(Axes):
             **kwargs
     ):
         """
-        Grafica fallas completas.
+        Grafica fallas completas procesadas por FAULTCORE.
 
-        Entrada pública para el usuario/geólogo:
-
+        Entrada pública:
             strike
             dip
             rake
             cine_1
             cine_2
 
-        El usuario no necesita conocer valor_cinematic.
+        FAULTCORE se encarga de:
+            - Normalización.
+            - Clasificación.
+            - Validación.
+            - Evaluación cinemática.
+
+        GOBKINEMATICS se encarga únicamente
+        de la representación gráfica.
         """
 
         # ======================================================
-        # 1. NORMALIZACIÓN BÁSICA
+        # 1. PROCESAMIENTO MEDIANTE FAULTCORE
         # ======================================================
 
-        data = kinematics_norm.normalize_basic_data(
+        registros = kinematics_norm.process_fault_data(
             strike=strike,
             dip=dip,
             rake=rake,
@@ -387,22 +448,11 @@ class KinematicAxes(Axes):
             cine_2=cine_2
         )
 
-
         # ======================================================
-        # 2. VALIDACIÓN GEOMÉTRICA
-        # ======================================================
-
-        data = kinematics_logic.validate_complete_faults(
-            data
-        )
-
-
-        # ======================================================
-        # 3. OPCIONES DE DIBUJO
+        # 2. OPCIONES DE DIBUJO
         # ======================================================
 
         color = kwargs.pop("color", "black")
-
         zorder = kwargs.pop("zorder", 4)
 
         point_kwargs = {
@@ -411,38 +461,42 @@ class KinematicAxes(Axes):
             "zorder": zorder
         }
 
-
         # ======================================================
-        # 4. GRAFICAR CADA FALLA
+        # 3. REPRESENTACIÓN DE FALLAS COMPLETAS
         # ======================================================
 
-        for (
-            s,
-            d,
-            r,
-            c1,
-            c2,
-            vc
-        ) in zip(
-            data["strike"],
-            data["dip"],
-            data["rake"],
-            data["cine_1"],
-            data["cine_2"],
-            data["valor_cinematic"]
-        ):
+        for registro in registros:
 
-            # --------------------------------------------------
-            # Coordenadas del STRIKE
-            # --------------------------------------------------
+            # Solo representar registros N5 conformes.
+            if registro.get("nivel") != "N5":
+                continue
+
+            if registro.get("estado") != "conforme":
+                continue
+
+            datos = registro["datos"]
+
+            s = datos.get("strike")
+            d = datos.get("dip")
+            r = datos.get("rake")
+            vc = registro.get("valor_cinematic")
+
+            # Verificar que los datos necesarios para
+            # esta representación estén disponibles.
+            if any(valor is None for valor in (s, d, r, vc)):
+                continue
+
+            # ==================================================
+            # 4. COORDENADAS DEL STRIKE
+            # ==================================================
 
             x_strike, y_strike = (
                 kinematics_math.strike_to_xy(s)
             )
 
-            # --------------------------------------------------
-            # Coordenadas DIP-RAKE
-            # --------------------------------------------------
+            # ==================================================
+            # 5. COORDENADAS DIP-RAKE
+            # ==================================================
 
             x_kin, y_kin = (
                 kinematics_math.dip_rake_to_xy(
@@ -452,13 +506,11 @@ class KinematicAxes(Axes):
                 )
             )
 
-
             # ==================================================
-            # CONECTOR
+            # 6. CONECTOR
             # ==================================================
 
             if show_connector:
-
                 self._draw_connector(
                     x_strike,
                     y_strike,
@@ -471,22 +523,19 @@ class KinematicAxes(Axes):
                     zorder=1
                 )
 
-
             # ==================================================
-            # PUNTO STRIKE
+            # 7. PUNTO STRIKE
             # ==================================================
 
             if show_strike:
-
                 self._draw_strike_point(
                     x_strike,
                     y_strike,
                     **point_kwargs
                 )
 
-
             # ==================================================
-            # PUNTO CINEMÁTICO
+            # 8. PUNTO CINEMÁTICO
             # ==================================================
 
             self._draw_kinematic_point(
@@ -497,45 +546,125 @@ class KinematicAxes(Axes):
                 **point_kwargs
             )
 
-
-
     # TEMPORALIDAD
+
     def plot_fault_temporality(
             self,
-            dip, rake,
-            cine_1, cine_2=None,
+            strike,
+            dip,
+            rake,
+            cine_1,
+            cine_2=None,
             indices=None,
             color="crimson",
             linewidth=1.2,
             alpha=0.9,
             zorder=15
     ):
-        if indices is None or len(indices) < 2:
-            raise ValueError("La secuencia temporal debe tener al menos 2 fallas")
+        """
+        Representa la evolución temporal de las fallas.
 
-        dip, rake, cine_1, cine_2 = np.atleast_1d(
-            dip, rake, cine_1, cine_2
+        strike:
+            Se recibe y procesa mediante FAULTCORE.
+            Su función dentro del análisis temporal
+            se desarrollará posteriormente.
+
+        dip, rake y componentes cinemáticas:
+            Se utilizan para calcular las coordenadas
+            de los puntos cinemáticos.
+
+        indices:
+            Orden temporal de las fallas.
+            Del registro más antiguo al más reciente.
+        """
+
+        # ======================================================
+        # 1. COMPROBAR ÍNDICES
+        # ======================================================
+
+        if indices is None or len(indices) < 2:
+            raise ValueError(
+                "La secuencia temporal debe tener al menos 2 fallas."
+            )
+
+        # ======================================================
+        # 2. PROCESAMIENTO MEDIANTE FAULTCORE
+        # ======================================================
+
+        registros = kinematics_norm.process_fault_data(
+            strike=strike,
+            dip=dip,
+            rake=rake,
+            cine_1=cine_1,
+            cine_2=cine_2
         )
 
-        # Coordenadas de la secuencia
-        coords = []
-        for i in indices:
-            x, y = kinematics_math.dip_rake_to_xy(
-                dip[i], rake[i], cine_1[i], cine_2[i]
-            )
-            coords.append((x, y))
+        # ======================================================
+        # 3. OBTENER COORDENADAS CINEMÁTICAS
+        # ======================================================
 
-        # Flechas consecutivas: antigua → joven
-        for (x0, y0), (x1, y1) in zip(coords[:-1], coords[1:]):
+        coords = []
+
+        for i in indices:
+
+            if not isinstance(i, (int, np.integer)):
+                raise TypeError(
+                    "Los índices temporales deben ser enteros."
+                )
+
+            if i < 0 or i >= len(registros):
+                raise IndexError(
+                    f"El índice temporal {i} está fuera del rango."
+                )
+
+            registro = registros[i]
+
+            # Solo utilizar registros N5 conformes.
+            if (
+                    registro.get("nivel") != "N5"
+                    or registro.get("estado") != "conforme"
+            ):
+                raise ValueError(
+                    f"El registro {i} no es una falla N5 conforme."
+                )
+
+            datos = registro["datos"]
+
+            d = datos.get("dip")
+            r = datos.get("rake")
+            vc = registro.get("valor_cinematic")
+
+            if any(valor is None for valor in (d, r, vc)):
+                raise ValueError(
+                    f"El registro {i} no contiene datos suficientes "
+                    "para calcular sus coordenadas."
+                )
+
+            x, y = kinematics_math.dip_rake_to_xy(
+                d,
+                r,
+                vc
+            )
+
+            coords.append((float(x[0]), float(y[0])))
+
+        # ======================================================
+        # 4. REPRESENTAR EVOLUCIÓN TEMPORAL
+        # ======================================================
+
+        for (x0, y0), (x1, y1) in zip(
+                coords[:-1],
+                coords[1:]
+        ):
             self.annotate(
                 "",
-                xy=(x1, y1),  # más joven
-                xytext=(x0, y0),  # más antigua
+                xy=(x1, y1),
+                xytext=(x0, y0),
                 arrowprops=dict(
                     arrowstyle="->",
                     color=color,
                     lw=linewidth,
-                    linestyle="--",  # 👈 ENTRE CORTES
+                    linestyle="--",
                     alpha=alpha
                 ),
                 zorder=zorder
@@ -543,49 +672,119 @@ class KinematicAxes(Axes):
 
     def plot_fault_conjugates(
             self,
-            strike, dip, rake,
-            cine_1, cine_2=None,
+            strike,
+            dip,
+            rake,
+            cine_1,
+            cine_2=None,
             conjugate_groups=None,
             arrow_scale=15,
             **kwargs
     ):
-        strike, dip, rake, cine_1, cine_2 = np.atleast_1d(
-            strike, dip, rake, cine_1, cine_2
+        """
+        Representa fallas conjugadas.
+
+        FAULTCORE realiza el procesamiento y evaluación.
+        GOBKINEMATICS calcula las coordenadas y representa
+        los puntos y las relaciones conjugadas.
+        """
+
+        # ======================================================
+        # 1. PROCESAMIENTO MEDIANTE FAULTCORE
+        # ======================================================
+
+        registros = kinematics_norm.process_fault_data(
+            strike=strike,
+            dip=dip,
+            rake=rake,
+            cine_1=cine_1,
+            cine_2=cine_2
         )
 
-        # ------------------------------
-        # Coordenadas cinemáticas
-        # ------------------------------
-        XY = []
-        for d, r, c1, c2 in zip(dip, rake, cine_1, cine_2):
-            x, y = kinematics_math.dip_rake_to_xy(d, r, c1, c2)
-            XY.append((x, y))
+        # ======================================================
+        # 2. OBTENER COORDENADAS CINEMÁTICAS
+        # ======================================================
 
-        # ------------------------------
-        # Plot puntos
-        # ------------------------------
+        XY = []
+
+        for i, registro in enumerate(registros):
+
+            if (
+                    registro.get("nivel") != "N5"
+                    or registro.get("estado") != "conforme"
+            ):
+                raise ValueError(
+                    f"El registro {i} no es una falla N5 conforme."
+                )
+
+            datos = registro["datos"]
+
+            d = datos.get("dip")
+            r = datos.get("rake")
+            vc = registro.get("valor_cinematic")
+
+            if any(valor is None for valor in (d, r, vc)):
+                raise ValueError(
+                    f"El registro {i} no contiene datos suficientes."
+                )
+
+            x, y = kinematics_math.dip_rake_to_xy(
+                d,
+                r,
+                vc
+            )
+
+            XY.append((
+                float(x[0]),
+                float(y[0])
+            ))
+
+        # ======================================================
+        # 3. REPRESENTAR LOS PUNTOS
+        # ======================================================
+
         for x, y in XY:
             self.scatter(
-                x, y,
+                x,
+                y,
                 s=kwargs.get("s", 60),
                 color=kwargs.get("color", "black"),
                 zorder=4
             )
 
+        # ======================================================
+        # 4. REPRESENTAR RELACIONES CONJUGADAS
+        # ======================================================
+
         if not conjugate_groups:
             return
 
-        # ------------------------------
-        # Flechas conjugadas
-        # ------------------------------
         for group in conjugate_groups:
+
             for i in range(len(group)):
+
                 for j in range(i + 1, len(group)):
-                    x1, y1 = map(float, XY[group[i]])
-                    x2, y2 = map(float, XY[group[j]])
+
+                    idx1 = group[i]
+                    idx2 = group[j]
+
+                    if not (
+                            0 <= idx1 < len(XY)
+                            and 0 <= idx2 < len(XY)
+                    ):
+                        raise IndexError(
+                            "Un índice de conjugación está fuera "
+                            "del rango de registros."
+                        )
+
+                    x1, y1 = XY[idx1]
+                    x2, y2 = XY[idx2]
 
                     arr1, arr2 = kinematics_visual.double_dashed_arrow(
-                        x1, y1, x2, y2,
+                        x1,
+                        y1,
+                        x2,
+                        y2,
                         arrow_scale=arrow_scale,
                         color=kwargs.get("color", "black")
                     )
@@ -595,52 +794,137 @@ class KinematicAxes(Axes):
 
     def plot_fault_hetereogeneous(
             self,
-            strike, dip, rake,
-            cine_1, cine_2=None,
+            strike,
+            dip,
+            rake,
+            cine_1,
+            cine_2=None,
             color="darkblue",
             linewidth=1.2,
             alpha=0.9,
             zorder=12
     ):
         """
-        Plot temporal automático:
-        - Flechas consecutivas (0→1→2→…)
-        - Strike y cinemática tratados por separado
-        - Offset automático si hay superposición
+        Representa la evolución temporal heterogénea.
+
+        - Evolución cinemática Dip-Rake.
+        - Evolución independiente del Strike.
+        - Conexiones entre Strike y Dip-Rake.
+        - Offset automático cuando existen superposiciones.
+
+        FAULTCORE procesa y evalúa los registros.
+        GOBKINEMATICS realiza la representación.
         """
 
-        strike, dip, rake, cine_1, cine_2 = np.atleast_1d(
-            strike, dip, rake, cine_1, cine_2
+        # ==================================================
+        # 1. PROCESAMIENTO MEDIANTE FAULTCORE
+        # ==================================================
+
+        registros = kinematics_norm.process_fault_data(
+            strike=strike,
+            dip=dip,
+            rake=rake,
+            cine_1=cine_1,
+            cine_2=cine_2
         )
 
-        n = len(dip)
+        # ==================================================
+        # 2. VALIDAR CANTIDAD DE REGISTROS
+        # ==================================================
+
+        n = len(registros)
+
         if n < 2:
-            raise ValueError("Se requieren al menos 2 puntos")
+            raise ValueError(
+                "Se requieren al menos 2 fallas."
+            )
 
         # ==================================================
-        # DIP – RAKE (cinemática)
+        # 3. OBTENER DATOS Y COORDENADAS
         # ==================================================
+
         kin_coords = []
+        strike_coords = []
 
-        for d, r, c1, c2 in zip(dip, rake, cine_1, cine_2):
-            x, y = kinematics_math.dip_rake_to_xy(d, r, c1, c2)
-            kin_coords.append((x, y))
+        for i, registro in enumerate(registros):
 
-            # Punto siempre
+            # Solo admitir fallas N5 conformes.
+            if (
+                    registro.get("nivel") != "N5"
+                    or registro.get("estado") != "conforme"
+            ):
+                raise ValueError(
+                    f"El registro {i} no es una falla N5 conforme."
+                )
+
+            datos = registro["datos"]
+
+            s = datos.get("strike")
+            d = datos.get("dip")
+            r = datos.get("rake")
+            vc = registro.get("valor_cinematic")
+
+            if any(valor is None for valor in (s, d, r, vc)):
+                raise ValueError(
+                    f"El registro {i} no contiene datos suficientes."
+                )
+
+            # ----------------------------------------------
+            # Coordenadas DIP-RAKE
+            # ----------------------------------------------
+
+            x, y = kinematics_math.dip_rake_to_xy(
+                d,
+                r,
+                vc
+            )
+
+            kin_coords.append((
+                float(x[0]),
+                float(y[0])
+            ))
+
+            # ----------------------------------------------
+            # Coordenadas STRIKE
+            # ----------------------------------------------
+
+            xs, ys = kinematics_math.strike_to_xy(s)
+
+            strike_coords.append((
+                float(xs[0]),
+                float(ys[0])
+            ))
+
+        # ==================================================
+        # 4. REPRESENTACIÓN DIP-RAKE
+        # ==================================================
+
+        for x, y in kin_coords:
             self.scatter(
-                x, y,
+                x,
+                y,
                 color=color,
                 s=20,
                 zorder=zorder
             )
 
-        # Flechas temporales (solo si cambia)
-        for (x0, y0), (x1, y1) in zip(kin_coords[:-1], kin_coords[1:]):
+        # Flechas temporales cinemáticas
+        for (x0, y0), (x1, y1) in zip(
+                kin_coords[:-1],
+                kin_coords[1:]
+        ):
+
             if np.allclose([x0, y0], [x1, y1]):
                 continue
 
-            x0o, y0o, x1o, y1o = kinematics_visual._apply_offset_if_overlap(
-                x0, y0, x1, y1, offset_mag=0.02
+            x0o, y0o, x1o, y1o = (
+                kinematics_visual._apply_offset_if_overlap(
+                    x0,
+                    y0,
+                    x1,
+                    y1,
+                    offset_mag=0.02
+                )
             )
 
             self.annotate(
@@ -658,32 +942,37 @@ class KinematicAxes(Axes):
             )
 
         # ==================================================
-        # STRIKE
+        # 5. REPRESENTACIÓN STRIKE
         # ==================================================
-        strike_coords = []
 
-        for s in strike:
-            xs, ys = kinematics_math.strike_to_xy(s)
-            strike_coords.append((xs, ys))
-
-            # Punto siempre
+        for xs, ys in strike_coords:
             self.scatter(
-                xs, ys,
+                xs,
+                ys,
                 color=color,
                 s=20,
                 zorder=zorder - 1
             )
 
-        # Flechas solo si cambia strike
+        # Flechas temporales Strike
         for i in range(n - 1):
-            if strike[i] == strike[i + 1]:
+
+            if registros[i]["datos"]["strike"] == (
+                    registros[i + 1]["datos"]["strike"]
+            ):
                 continue
 
             x0, y0 = strike_coords[i]
             x1, y1 = strike_coords[i + 1]
 
-            x0o, y0o, x1o, y1o = kinematics_visual._apply_offset_if_overlap(
-                x0, y0, x1, y1, offset_mag=0.02
+            x0o, y0o, x1o, y1o = (
+                kinematics_visual._apply_offset_if_overlap(
+                    x0,
+                    y0,
+                    x1,
+                    y1,
+                    offset_mag=0.02
+                )
             )
 
             self.annotate(
@@ -701,9 +990,10 @@ class KinematicAxes(Axes):
             )
 
         # ==================================================
-        # CONEXIONES STRIKE ↔ DIP–RAKE
+        # 6. CONEXIONES STRIKE ↔ DIP-RAKE
         # ==================================================
-        # Inicio
+
+        # Conexión inicial
         self.plot(
             [strike_coords[0][0], kin_coords[0][0]],
             [strike_coords[0][1], kin_coords[0][1]],
@@ -713,7 +1003,7 @@ class KinematicAxes(Axes):
             zorder=zorder - 2
         )
 
-        # Final
+        # Conexión final
         self.plot(
             [strike_coords[-1][0], kin_coords[-1][0]],
             [strike_coords[-1][1], kin_coords[-1][1]],
@@ -723,251 +1013,1070 @@ class KinematicAxes(Axes):
             zorder=zorder - 2
         )
 
-        # ==============================
-        # CONEXIONES STRIKE ↔ DIP–RAKE
-        # ==============================
-        # Inicio
-        self.plot(
-            [strike_coords[0][0], kin_coords[0][0]],
-            [strike_coords[0][1], kin_coords[0][1]],
-            linestyle="--",
-            color=color,
-            alpha=0.5,
-            zorder=zorder - 2
-        )
-
-        # Final
-        self.plot(
-            [strike_coords[-1][0], kin_coords[-1][0]],
-            [strike_coords[-1][1], kin_coords[-1][1]],
-            linestyle="--",
-            color=color,
-            alpha=0.5,
-            zorder=zorder - 2
-        )
-
-# PLOT GENERAL  DESDE ARRAYS
-
-    def plot_fault_N4_caso_3(self, dip, cine_1, cine_2, **kwargs):
-        """
-        Plot especial para N4 caso 3 (sin rake, dos cinemáticas)
-        """
-
-        valor = kinematics_logic.cinematic_array(cine_1, cine_2)
-
-        pts = kinematics_math.transform_N4_caso_3(dip, valor)
-        if pts is None:
-            return
-
-        x, y = zip(*pts)
-
-        self.plot(
-            x, y,
-            linewidth=2,
-            linestyle="--",
+    def plot_fault_N4_caso_3(
+            self,
+            dip,
+            valor_cinematic,
+            longitud_guion=0.08,
+            representation_mode="compact",
             **kwargs
+    ):
+        """
+        Representación gráfica de N4 caso 3.
+
+        Complete:
+            Dibuja el segmento geométrico original.
+
+        Compact:
+            Dibuja un pequeño guion centrado
+            y orientado según el segmento original.
+        """
+
+        if representation_mode not in ("complete", "compact"):
+            raise ValueError(
+                "representation_mode debe ser 'complete' o 'compact'."
+            )
+
+        pts = kinematics_math.transform_N4_caso_3(
+            dip,
+            valor_cinematic
         )
 
-    def plot_fault_N3_caso_1(self, dip, rake, conectar_linea=False, **kwargs):
-        """
-        Plot especial para N3 caso 1
-        """
-
-        pts = kinematics_math.transform_N3_caso_1(dip, rake)
         if pts is None:
             return
 
         (x1, y1), (x2, y2) = pts
 
-        # ---------------------------
-        # 1️⃣ Puntos huecos
-        # ---------------------------
-        self.scatter(
-            [x1, x2],
-            [y1, y2],
-            s=50,
-            facecolors='none',  # huecos
-            edgecolors='black',
-            zorder=5,
-            **kwargs
+        # ==========================================
+        # 1. CALCULAR EL CENTRO DEL SEGMENTO
+        # ==========================================
+
+        xc, yc = kinematics_math.center_segment(
+            (x1, y1),
+            (x2, y2)
         )
 
-        # ---------------------------
-        # 2️⃣ Línea opcional
-        # ---------------------------
+        # ==========================================
+        # 2. REPRESENTACIÓN COMPLETA
+        # ==========================================
+
+        if representation_mode == "complete":
+
+            self.plot(
+                [x1, x2],
+                [y1, y2],
+                **kwargs
+            )
+
+        # ==========================================
+        # 3. REPRESENTACIÓN COMPACTA
+        # ==========================================
+
+        elif representation_mode == "compact":
+
+            dx = x2 - x1
+            dy = y2 - y1
+
+            longitud = (dx ** 2 + dy ** 2) ** 0.5
+
+            if longitud == 0:
+                return
+
+            # Vector unitario
+            ux = dx / longitud
+            uy = dy / longitud
+
+            # Mitad de la longitud del guion
+            mitad = longitud_guion / 2.0
+
+            # Extremos del guion central
+            xa = xc - ux * mitad
+            ya = yc - uy * mitad
+
+            xb = xc + ux * mitad
+            yb = yc + uy * mitad
+
+            self.plot(
+                [xa, xb],
+                [ya, yb],
+                **kwargs
+            )
+
+        # Devolver el mismo centro en ambos modos
+        return (xc, yc)
+
+    def plot_fault_N3_caso_1(
+            self,
+            dip,
+            rake,
+            conectar_linea=False,
+            **kwargs
+    ):
+        pts = kinematics_math.transform_N3_caso_1(dip, rake)
+
+        if pts is None:
+            return
+
+        (x1, y1), (x2, y2) = pts
+
+        # Caso especial: falla vertical
+        if dip == 90:
+
+            # Primer punto: orientación según la cinemática inversa
+            if rake <= 90:
+
+                marker1 = kinematics_visual.half_circle_marker(upper=False)
+                marker2 = kinematics_visual.half_circle_marker(upper=True)
+
+            else:
+                marker1 = kinematics_visual.half_circle_marker(upper=False)
+                marker2 = kinematics_visual.half_circle_marker(upper=True)
+
+            self.scatter(
+                x1, y1,
+                marker=marker2,
+                s=50,
+                facecolors="none",
+                edgecolors="black",
+                zorder=5,
+                **kwargs
+            )
+
+            self.scatter(
+                x2, y2,
+                marker=marker1,
+                s=50,
+                facecolors="none",
+                edgecolors="black",
+                zorder=5,
+                **kwargs
+            )
+
+        else:
+            self.scatter(
+                [x1, x2],
+                [y1, y2],
+                s=50,
+                facecolors="none",
+                edgecolors="black",
+                zorder=5,
+                **kwargs
+            )
+
         if conectar_linea:
             self.plot(
                 [x1, x2],
                 [y1, y2],
-                linestyle='--',
-                color='black',
+                linestyle="--",
+                color="black",
                 alpha=0.3,
                 zorder=1
             )
 
-    def plot_fault_N3_caso_2(self, dip, cine_1, cine_2=None, **kwargs):
-        valor = kinematics_logic.cinematic_array(cine_1, cine_2)
-        valor = int(valor[0])
+    def plot_fault_N3_caso_2(
+            self,
+            dip,
+            valor_cinematic,
+            longitud_guion=0.08,
+            representation_mode="compact",
+            **kwargs
+    ):
+        """
+        Representación gráfica de N3 caso 2.
 
-        segmentos = kinematics_math.transform_N3_case2(dip, valor)
+        Complete:
+            Dibuja los dos segmentos originales.
+
+        Compact:
+            Dip-slip (1, -1):
+                Un único guion central entre los dos segmentos.
+
+            Strike-slip (3, -3):
+                Dos guiones centrales, uno por cada segmento.
+        """
+
+        if representation_mode not in ("complete", "compact"):
+            raise ValueError(
+                "representation_mode debe ser 'complete' o 'compact'."
+            )
+
+        segmentos = kinematics_math.transform_N3_case2(
+            dip,
+            valor_cinematic
+        )
 
         if segmentos is None:
             return
 
-        for segmento in segmentos:
-            x, y = zip(*segmento)
-            self.plot(x, y, **kwargs)
+        # ==========================================
+        # 1. DETERMINAR LOS CENTROS
+        # ==========================================
 
-    def plot_fault_N2_caso_1(self, dip, **kwargs):
+        if valor_cinematic in (1, -1):
+
+            centros = [
+                kinematics_math.center_segment(
+                    segmento[0],
+                    segmento[1]
+                )
+                for segmento in segmentos
+            ]
+
+            centro_general = kinematics_math.center_segment(
+                centros[0],
+                centros[1]
+            )
+
+            centros_representacion = [centro_general]
+
+        elif valor_cinematic in (3, -3):
+
+            centros_representacion = [
+                kinematics_math.center_segment(
+                    segmento[0],
+                    segmento[1]
+                )
+                for segmento in segmentos
+            ]
+
+        else:
+            return
+
+        # ==========================================
+        # 2. REPRESENTACIÓN COMPLETA
+        # ==========================================
+
+        if representation_mode == "complete":
+
+            for segmento in segmentos:
+                (x1, y1), (x2, y2) = segmento
+
+                self.plot(
+                    [x1, x2],
+                    [y1, y2],
+                    **kwargs
+                )
+
+        # ==========================================
+        # 3. REPRESENTACIÓN COMPACTA
+        # ==========================================
+
+        elif representation_mode == "compact":
+
+            for centro in centros_representacion:
+                xc, yc = centro
+
+                self.plot(
+                    [
+                        xc - longitud_guion / 2,
+                        xc + longitud_guion / 2
+                    ],
+                    [yc, yc],
+                    **kwargs
+                )
+
+        # Devolver los mismos centros en ambos modos
+        return centros_representacion
+
+    def plot_fault_N2_caso_1(
+            self,
+            dip,
+            longitud_guion=0.08,
+            representation_mode="compact",
+            **kwargs
+    ):
         """
         N2 caso único:
-        - strike + dip
-        - sin rake
-        - sin cinemática
-        - 4 rectas horizontales simétricas
+        - Strike + dip.
+        - Sin rake.
+        - Sin cinemática.
+
+        Modo completo:
+            Dibuja los cuatro segmentos geométricos originales.
+
+        Modo compacto:
+            Dibuja dos guiones representativos.
+
+        Los centros geométricos se conservan
+        independientemente del modo de representación.
         """
 
-        x0 = 0
-        xp = 1
-        xn = -1
+        if representation_mode not in ("complete", "compact"):
+            raise ValueError(
+                "representation_mode debe ser 'complete' o 'compact'."
+            )
+
+        # ==========================================
+        # 1. GEOMETRÍA ORIGINAL
+        # ==========================================
 
         y1 = 1 - dip / 90
         y2 = -y1
 
-        # Todas las líneas comparten los mismos kwargs (color, alpha, lw, etc.)
-        self.plot([x0, xp], [y1, y1], **kwargs)
-        self.plot([x0, xn], [y1, y1], **kwargs)
-
-        self.plot([x0, xp], [y2, y2], **kwargs)
-        self.plot([x0, xn], [y2, y2], **kwargs)
-
-    def plot_fault_N1_caso_unico(self, strike, **kwargs):
-        """
-        N1 caso único:
-        - Solo strike.
-        - Punto sobre el círculo.
-        """
-        x, y = kinematics_math.strike_to_xy(strike)
-
-        return self._draw_strike_point(
-            x,
-            y,
-            **kwargs
-        )
-
-    def plot_general_faults(self, strike, dip, rake, cine_1, cine_2 = None):
-        faults = kinematics_norm.from_lists(strike, dip, rake, cine_1, cine_2)
-        st, di, rak, cin1, cin2 = kinematics_norm.extract_arrays(faults)
-        registro = kinematics_logic.clasify_for_items(st, di, rak, cin1, cin2)
-        registros_finales = [kinematics_logic.process_registration(r) for r in registro]
-
-        # STRIKE: representar todos los registros que lo tengan
-        for r in registros_finales:
-            d = r["datos"]
-            strike = d.get("strike")
-
-            if strike is None:
-                continue
-
-            x, y = kinematics_math.strike_to_xy(strike)
-
-            self._draw_strike_point(
-                x,
-                y,
-                color="black",
-                alpha=0.6,
-                zorder=4
-            )
-
-        # PARA N5
-        conformes = [r for r in registros_finales if r["estado"] == "conforme"]
-        strike_c = []
-        dip_c = []
-        rake_c = []
-        cine1_c = []
-        cine2_c = []
-
-        for r in conformes:
-            d = r["datos"]
-            strike_c.append(d["strike"])
-            dip_c.append(d["dip"])
-            rake_c.append(d["rake"])
-            cine1_c.append(d["cine_1"])
-            cine2_c.append(d["cine_2"])
-
-        self.plot_fault(
-            strike_c,
-            dip_c,
-            rake_c,
-            cine1_c,
-            cine2_c,
-            color="red",
-            label="Conformes"
-        )
-
-        # caso N4 caso 3
-
-        n4_caso_3 = [
-            r for r in registros_finales
-            if r.get("modo") == "N4_caso_3"
+        segmentos = [
+            ((0, y1), (1, y1)),
+            ((0, y1), (-1, y1)),
+            ((0, y2), (1, y2)),
+            ((0, y2), (-1, y2))
         ]
 
-        for r in n4_caso_3:
-            d = r["datos"]
-            self.plot_fault_N4_caso_3(
-                dip=d["dip"],
-                cine_1=d["cine_1"],
-                cine_2=d["cine_2"],
-                color="purple",
-                alpha=0.7
+        # Centros representativos originales
+        centros = [
+            (0, y1),
+            (0, y2)
+        ]
+
+        # ==========================================
+        # 2. MODO COMPLETO
+        # ==========================================
+
+        if representation_mode == "complete":
+
+            for (x1, y_inicio), (x2, y_fin) in segmentos:
+                self.plot(
+                    [x1, x2],
+                    [y_inicio, y_fin],
+                    **kwargs
+                )
+
+        # ==========================================
+        # 3. MODO COMPACTO
+        # ==========================================
+
+        elif representation_mode == "compact":
+
+            for xc, yc in centros:
+                self.plot(
+                    [
+                        xc - longitud_guion / 2,
+                        xc + longitud_guion / 2
+                    ],
+                    [yc, yc],
+                    **kwargs
+                )
+
+        return centros
+
+    def plot_fault_N1_caso_unico(self, strike, **kwargs):
+        x, y = kinematics_math.strike_to_xy(strike)
+        return self._draw_strike_only_marker(x, y, **kwargs)
+
+    def plot_general_faults(
+            self,
+            strike,
+            dip,
+            rake,
+            cine_1,
+            cine_2=None,
+            representation_mode="complete"
+    ):
+        """
+        Representa los registros estructurales procesados por FAULTCORE.
+
+        Función temporal de diagnóstico:
+            - Identifica nivel y subtipo.
+            - Comprueba el estado.
+            - Registra qué representación se ejecuta.
+            - Identifica casos no representados.
+        """
+        # ==================================================
+        # 0. VALIDAR MODO DE REPRESENTACIÓN
+        # ==================================================
+
+        if representation_mode not in ("complete", "compact"):
+            raise ValueError(
+                "representation_mode debe ser 'complete' o 'compact'."
+            )
+        # ==================================================
+        # 1. PROCESAMIENTO DE DATOS
+        # ==================================================
+
+        registros_finales = kinematics_norm.process_fault_data(
+            strike=strike,
+            dip=dip,
+            rake=rake,
+            cine_1=cine_1,
+            cine_2=cine_2
+        )
+
+        # ==================================================
+        # 2. CONTADORES
+        # ==================================================
+
+        conteo_dibujo = {
+            "N1": 0,
+            "N2": 0,
+            "N2_caso_2": 0,
+            "N3_caso_1": 0,
+            "N3_caso_2": 0,
+            "N3_caso_3": 0,
+            "N4_caso_3": 0,
+            "N5": 0
+        }
+
+        conteo_estado = {
+            "conforme": 0,
+            "inconforme": 0,
+            "otros": 0
+        }
+
+        no_representados = []
+
+        # ==================================================
+        # 3. DIAGNÓSTICO DE REGISTROS
+        # ==================================================
+
+        print("\n========== DIAGNÓSTICO GENERAL ==========")
+        print(f"TOTAL DE REGISTROS: {len(registros_finales)}")
+
+        for i, registro in enumerate(registros_finales):
+            datos = registro.get("datos", {})
+
+            print(f"\nREGISTRO {i + 1}")
+            print(f"  Nivel: {registro.get('nivel')}")
+            print(f"  Subtipo: {registro.get('subtipo')}")
+            print(f"  Estado: {registro.get('estado')}")
+            print(f"  Strike: {datos.get('strike')}")
+            print(f"  Dip: {datos.get('dip')}")
+            print(f"  Rake: {datos.get('rake')}")
+            print(f"  Cine 1: {datos.get('cine_1')}")
+            print(f"  Cine 2: {datos.get('cine_2')}")
+            print(f"  Valor cinemático: {registro.get('valor_cinematic')}")
+
+        print("\n=========================================\n")
+
+        # ==================================================
+        # 4. RECORRER REGISTROS
+        # ==================================================
+
+        for i, registro in enumerate(registros_finales):
+
+            nivel = registro.get("nivel")
+            subtipo = registro.get("subtipo")
+            estado = registro.get("estado")
+
+            datos = registro.get("datos", {})
+
+            s = datos.get("strike")
+            d = datos.get("dip")
+            r = datos.get("rake")
+
+            vc = registro.get("valor_cinematic")
+
+            print(
+                f"\n[DIBUJO] Registro {i + 1} | "
+                f"{nivel} | {subtipo} | {estado}"
             )
 
-        # caso N3 caso 1
-        n3_caso_1 = [r for r in registros_finales if r.get("modo") == "N3_caso_1"]
-        for r in n3_caso_1:
-            d = r["datos"]
-            self.plot_fault_N3_caso_1(
-                dip=d["dip"],
-                rake=d["rake"],
-                conectar_linea=True  # opcional
+            # --------------------------------------------------
+            # 4.1 ESTADO
+            # --------------------------------------------------
+
+            if estado == "conforme":
+                conteo_estado["conforme"] += 1
+
+            elif estado == "inconforme":
+                conteo_estado["inconforme"] += 1
+
+            else:
+                conteo_estado["otros"] += 1
+
+            # Solo representar registros conformes
+            if estado != "conforme":
+                print("  DESCARTADO: estado diferente de conforme")
+
+                no_representados.append(
+                    (i + 1, nivel, subtipo, estado)
+                )
+
+                continue
+
+            # ==================================================
+            # 5. REPRESENTACIÓN DEL STRIKE
+            # ==================================================
+
+            x_strike = None
+            y_strike = None
+
+            if s is not None:
+                x_strike, y_strike = kinematics_math.strike_to_xy(s)
+
+                if not (
+                        nivel == "N1"
+                        and subtipo == "solamente_strike"
+                ):
+                    self._draw_strike_point(
+                        x_strike,
+                        y_strike,
+                        color="black",
+                        alpha=0.6,
+                        zorder=4
+                    )
+            # ==================================================
+            # 6. N5: FALLAS COMPLETAS
+            # ==================================================
+
+            if nivel == "N5":
+
+                if any(valor is None for valor in (s, d, r, vc)):
+                    print("  DESCARTADO: faltan datos para N5")
+
+                    no_representados.append(
+                        (i + 1, nivel, subtipo, "datos faltantes")
+                    )
+
+                    continue
+
+                x_kin, y_kin = (
+                    kinematics_math.dip_rake_to_xy(
+                        d,
+                        r,
+                        vc
+                    )
+                )
+
+                # Conector strike-cinemática
+                self._draw_connector(
+                    x_strike,
+                    y_strike,
+                    x_kin,
+                    y_kin,
+                    color="black",
+                    linewidth=0.5,
+                    linestyle="--",
+                    alpha=0.25,
+                    zorder=1
+                )
+
+                # Punto cinemático
+                self._draw_kinematic_point(
+                    x_kin,
+                    y_kin,
+                    d,
+                    vc,
+                    color="red",
+                    zorder=4
+                )
+
+                conteo_dibujo["N5"] += 1
+
+                print("  REPRESENTACIÓN: N5")
+                continue
+
+            # ==================================================
+            # 7. N4: CASO 3
+            # ==================================================
+
+            elif (
+                    nivel == "N4"
+                    and subtipo == "sin_rake_dos_cinematicas"
+            ):
+
+                if d is None or vc is None or s is None:
+                    print("  DESCARTADO: faltan datos para N4")
+
+                    no_representados.append(
+                        (i + 1, nivel, subtipo, "datos faltantes")
+                    )
+
+                    continue
+
+                # Obtener los extremos del segmento N4
+                puntos_n4 = kinematics_math.transform_N4_caso_3(
+                    d,
+                    vc
+                )
+
+                if puntos_n4 is None:
+                    print("  DESCARTADO: no se pudo calcular el segmento N4")
+
+                    no_representados.append(
+                        (i + 1, nivel, subtipo, "error geométrico")
+                    )
+
+                    continue
+
+                p1, p2 = puntos_n4
+
+                # Calcular el centro del segmento
+                x_centro, y_centro = kinematics_math.center_segment(
+                    p1,
+                    p2
+                )
+
+                # Representación del segmento N4
+                self.plot_fault_N4_caso_3(
+                    dip=d,
+                    valor_cinematic=vc,
+                    representation_mode=representation_mode,
+                    color="purple",
+                    alpha=0.7
+                )
+
+                # Conectar el strike con el centro del segmento
+                self._draw_connector(
+                    x_strike,
+                    y_strike,
+                    x_centro,
+                    y_centro,
+                    color="black",
+                    linewidth=0.7,
+                    linestyle="--",
+                    alpha=0.25,
+                    zorder=1
+                )
+
+                conteo_dibujo["N4_caso_3"] += 1
+
+                print("  REPRESENTACIÓN: N4 caso 3")
+                continue
+            # ==================================================
+            # 8. N3: CASO 1
+            # ==================================================
+
+            elif (
+                    nivel == "N3"
+                    and subtipo == "geometria_sin_cinematicas"
+            ):
+
+                if d is None or r is None or s is None:
+                    print("  DESCARTADO: faltan datos para N3 caso 1")
+
+                    no_representados.append(
+                        (i + 1, nivel, subtipo, "datos faltantes")
+                    )
+
+                    continue
+
+                # Obtener los dos puntos geométricos N3
+                puntos_n3 = kinematics_math.transform_N3_caso_1(d, r)
+
+                if puntos_n3 is None:
+                    print("  DESCARTADO: no se pudieron calcular los puntos N3")
+
+                    no_representados.append(
+                        (i + 1, nivel, subtipo, "error geométrico")
+                    )
+
+                    continue
+
+                (x1, y1), (x2, y2) = puntos_n3
+
+                # Dibujar los dos puntos N3
+                self.plot_fault_N3_caso_1(
+                    dip=d,
+                    rake=r,
+                    conectar_linea=False
+                )
+
+                # Conectar el strike con el primer punto N3
+                self._draw_connector(
+                    x_strike,
+                    y_strike,
+                    x1,
+                    y1,
+                    color="black",
+                    linewidth=0.7,
+                    linestyle="--",
+                    alpha=0.25,
+                    zorder=1
+                )
+
+                # Conectar el strike con el segundo punto N3
+                self._draw_connector(
+                    x_strike,
+                    y_strike,
+                    x2,
+                    y2,
+                    color="black",
+                    linewidth=0.7,
+                    linestyle="--",
+                    alpha=0.25,
+                    zorder=1
+                )
+
+                conteo_dibujo["N3_caso_1"] += 1
+
+                print("  REPRESENTACIÓN: N3 caso 1")
+                continue
+            # ==================================================
+            # 9. N3: CASO 2
+            # ==================================================
+
+            # ==================================================
+            # 9. N3: CASO 2
+            # ==================================================
+
+            elif (
+                    nivel == "N3"
+                    and subtipo == "una_cinematica_sin_rake"
+            ):
+
+                if d is None or vc is None or s is None:
+                    print("  DESCARTADO: faltan datos para N3 caso 2")
+
+                    no_representados.append(
+                        (i + 1, nivel, subtipo, "datos faltantes")
+                    )
+
+                    continue
+
+                # ----------------------------------------------
+                # 1. Dibujar los guiones centrales
+                # ----------------------------------------------
+
+                centros_n3 = self.plot_fault_N3_caso_2(
+                    dip=d,
+                    valor_cinematic=vc,
+                    longitud_guion=0.08,
+                    representation_mode=representation_mode,
+                    color="red",
+                    linewidth=2,
+                    alpha=0.8,
+                    zorder=5
+                )
+
+                if centros_n3 is None:
+                    print("  DESCARTADO: no se pudo representar N3 caso 2")
+
+                    no_representados.append(
+                        (i + 1, nivel, subtipo, "error geométrico")
+                    )
+
+                    continue
+
+                # ----------------------------------------------
+                # 2. Conectar cada centro con el strike
+                # ----------------------------------------------
+
+                for x_centro, y_centro in centros_n3:
+                    self._draw_connector(
+                        x_strike,
+                        y_strike,
+                        x_centro,
+                        y_centro,
+                        color="black",
+                        linewidth=0.7,
+                        linestyle="--",
+                        alpha=0.25,
+                        zorder=1
+                    )
+
+                # ----------------------------------------------
+                # 3. Registrar representación
+                # ----------------------------------------------
+
+                conteo_dibujo["N3_caso_2"] += 1
+
+                print(
+                    f"  REPRESENTACIÓN: N3 caso 2 | "
+                    f"Valor cinemático: {vc} | "
+                    f"Guiones: {len(centros_n3)}"
+                )
+
+                continue
+
+
+            # ==================================================
+            # N3: CASO 3
+            # STRIKE + DOS CINEMÁTICAS, SIN DIP NI RAKE
+            # ==================================================
+
+            elif (
+                    nivel == "N3"
+                    and subtipo == "dos_cinematicas_sin_dip_ni_rake"
+            ):
+
+                cine_1 = datos.get("cine_1")
+                cine_2 = datos.get("cine_2")
+
+                if s is None or cine_1 is None or cine_2 is None:
+                    print("  DESCARTADO: faltan datos para N3 caso 3")
+
+                    no_representados.append(
+                        (i + 1, nivel, subtipo, "datos faltantes")
+                    )
+
+                    continue
+
+                # ----------------------------------------------
+                # 1. Calcular las posiciones de ambos puntos
+                # ----------------------------------------------
+
+                puntos_n3 = kinematics_math.get_cinematic_pair_point_positions(
+                    cine_1=cine_1,
+                    cine_2=cine_2,
+                    radius=1.0,
+                    offset=0.15
+                )
+
+                if puntos_n3 is None:
+                    print("  DESCARTADO: combinación cinemática no reconocida")
+
+                    no_representados.append(
+                        (i + 1, nivel, subtipo, "error de ubicación")
+                    )
+
+                    continue
+
+                (x1, y1), (x2, y2) = puntos_n3
+
+                # ----------------------------------------------
+                # 2. Conectar ambos puntos con el strike
+                # ----------------------------------------------
+
+                for x_auxiliar, y_auxiliar in puntos_n3:
+                    self._draw_connector(
+                        x_strike,
+                        y_strike,
+                        x_auxiliar,
+                        y_auxiliar,
+                        color="black",
+                        linewidth=0.7,
+                        linestyle="--",
+                        alpha=0.25,
+                        zorder=1
+                    )
+
+                # ----------------------------------------------
+                # 3. Dibujar los dos puntos auxiliares
+                # ----------------------------------------------
+
+                self.plot(
+                    [x1, x2],
+                    [y1, y2],
+                    marker="o",
+                    markersize=5,
+                    color="red",
+                    linestyle="None",
+                    alpha=0.9,
+                    zorder=5
+                )
+
+                # ----------------------------------------------
+                # 4. Registrar representación
+                # ----------------------------------------------
+
+                conteo_dibujo["N3_caso_3"] += 1
+
+                print(
+                    f"  REPRESENTACIÓN: N3 caso 3 | "
+                    f"Cinemáticas: {cine_1} + {cine_2} | "
+                    f"Puntos: {puntos_n3}"
+                )
+
+                continue
+
+
+            # ==================================================
+            # 10. N2: CASO 1
+            # ==================================================
+            # ==================================================
+            # 10. N2: CASO 1
+            # ==================================================
+
+            elif (
+                    nivel == "N2"
+                    and subtipo == "plano_sin_rake_ni_cinematica"
+            ):
+
+                if d is None:
+                    print("  DESCARTADO: falta dip para N2")
+
+                    no_representados.append(
+                        (i + 1, nivel, subtipo, "dip faltante")
+                    )
+
+                    continue
+
+                centros_n2 = self.plot_fault_N2_caso_1(
+                    dip=d,
+                    longitud_guion=0.08,
+                    representation_mode=representation_mode,
+                    color="red",
+                    linewidth=2,
+                    alpha=0.8,
+                    zorder=5
+                )
+
+                for x_centro, y_centro in centros_n2:
+                    self._draw_connector(
+                        x_strike,
+                        y_strike,
+                        x_centro,
+                        y_centro,
+                        color="black",
+                        linewidth=0.7,
+                        linestyle="--",
+                        alpha=0.25,
+                        zorder=1
+                    )
+
+                conteo_dibujo["N2"] += 1
+
+                print(
+                    f"  REPRESENTACIÓN: N2 | "
+                    f"Guiones: {len(centros_n2)}"
+                )
+
+                continue
+
+            # ==================================================
+            # N2: CASO 2
+            # STRIKE + UNA CINEMÁTICA, SIN DIP NI RAKE
+            # ==================================================
+
+            elif (
+                    nivel == "N2"
+                    and subtipo == "strike_con_una_cinematica"
+            ):
+
+                cine_1 = datos.get("cine_1")
+
+                if s is None or cine_1 is None:
+                    print("  DESCARTADO: faltan datos para N2 caso 2")
+
+                    no_representados.append(
+                        (i + 1, nivel, subtipo, "datos faltantes")
+                    )
+
+                    continue
+
+                # ----------------------------------------------
+                # 1. Calcular la posición del punto auxiliar
+                # ----------------------------------------------
+
+                punto_auxiliar = kinematics_math.get_cinematic_point_position(
+                    cinematic=cine_1,
+                    radius=1.0
+                )
+
+                if punto_auxiliar is None:
+                    print("  DESCARTADO: cinemática no reconocida")
+
+                    no_representados.append(
+                        (i + 1, nivel, subtipo, "error de ubicación")
+                    )
+
+                    continue
+
+                x_auxiliar, y_auxiliar = punto_auxiliar
+
+                # ----------------------------------------------
+                # 2. Conectar el punto auxiliar con el strike
+                # ----------------------------------------------
+
+                self._draw_connector(
+                    x_strike,
+                    y_strike,
+                    x_auxiliar,
+                    y_auxiliar,
+                    color="black",
+                    linewidth=0.7,
+                    linestyle="--",
+                    alpha=0.25,
+                    zorder=1
+                )
+
+                # ----------------------------------------------
+                # 3. Dibujar el punto auxiliar
+                # ----------------------------------------------
+
+                self.plot(
+                    [x_auxiliar],
+                    [y_auxiliar],
+                    marker="o",
+                    markersize=5,
+                    color="red",
+                    linestyle="None",
+                    alpha=0.9,
+                    zorder=5
+                )
+
+                # ----------------------------------------------
+                # 4. Registrar representación
+                # ----------------------------------------------
+
+                conteo_dibujo["N2_caso_2"] += 1
+
+                print(
+                    f"  REPRESENTACIÓN: N2 caso 2 | "
+                    f"Cinemática: {cine_1} | "
+                    f"Punto: {punto_auxiliar}"
+                )
+
+                continue
+
+            # ==================================================
+            # 11. N1: CASO ÚNICO
+            # ==================================================
+
+            elif (
+
+                    nivel == "N1"
+
+                    and subtipo == "solamente_strike"
+
+            ):
+
+                self._draw_strike_only_marker(
+
+                    x_strike,
+
+                    y_strike,
+
+                    color="black",
+
+                    alpha=0.6,
+
+                    zorder=4
+
+                )
+
+                conteo_dibujo["N1"] += 1
+
+                print("  REPRESENTACIÓN: N1")
+
+                continue
+
+            # ==================================================
+            # 12. NIVEL O SUBTIPO NO RECONOCIDO
+            # ==================================================
+
+            print("  SIN REPRESENTACIÓN: nivel/subtipo no reconocido")
+
+            no_representados.append(
+                (i + 1, nivel, subtipo, "sin función gráfica")
             )
-        n3_caso_2 = [r for r in registros_finales if r.get("modo") == "N3_caso_2"]
 
-        for r in n3_caso_2:
-            d = r["datos"]
-            self.plot_fault_N3_caso_2(
-                dip=d["dip"],
-                cine_1=d["cine_1"],
-                cine_2=d["cine_2"],
-                color="red",
-                linestyle="--",
-                alpha=0.8
-            )
+        # ==================================================
+        # 13. RESUMEN DE REPRESENTACIONES
+        # ==================================================
 
-        n2 = [r for r in registros_finales if r.get("modo") == "N2_caso_unico"]
+        print("\n========== RESUMEN DE REPRESENTACIÓN ==========")
 
-        for r in n2:
-            d = r["datos"]
-            self.plot_fault_N2_caso_1(
-                dip=d["dip"],
-                color="red",
-                linestyle="--",
-                linewidth=1.5,
-                alpha=0.8
-            )
-        # caso N1
-        n1 = [r for r in registros_finales if r.get("modo") == "N1_caso_unico"]
+        print("\nEstados:")
+        for estado, cantidad in conteo_estado.items():
+            print(f"  {estado}: {cantidad}")
 
-        for r in n1:
-            d = r["datos"]
-            self.plot_fault_N1_caso_unico(
-                strike=d["strike"],
-                s=100,
-                facecolors="none",  # hueco
-                edgecolors="black",
-                alpha=0.6
-            )
+        print("\nRepresentaciones ejecutadas:")
+        for caso, cantidad in conteo_dibujo.items():
+            print(f"  {caso}: {cantidad}")
 
+        print("\nRegistros no representados:")
+
+        if no_representados:
+            for registro in no_representados:
+                print(
+                    f"  Registro {registro[0]} | "
+                    f"Nivel: {registro[1]} | "
+                    f"Subtipo: {registro[2]} | "
+                    f"Motivo: {registro[3]}"
+                )
+        else:
+            print("  Ninguno")
+
+        print("\n===============================================\n")
 
 
 # Registrar el Axes

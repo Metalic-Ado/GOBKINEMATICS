@@ -1,7 +1,4 @@
 import numpy as np
-from . import kinematics_logic
-
-import numpy as np
 
 
 def changes_magnitud_rake(dip, rake, valor_cinematic):
@@ -100,101 +97,63 @@ def _dip_to_y(dip, rake, valor_cinematic):
 
 def dip_rake_to_xy(dip, rake, valor_cinematic):
     """
-    Calcula X,Y a partir de datos geométricos
-    previamente validados.
+    Calcula las coordenadas X,Y de un registro individual.
+
+    Los datos recibidos corresponden a un registro
+    previamente procesado por FAULTCORE.
 
     Parámetros
     ----------
-    dip : escalar o secuencia
-    rake : escalar o secuencia
-    valor_cinematic : escalar o secuencia
+    dip : float
+    rake : float
+    valor_cinematic : float
 
     Returns
     -------
-    x, y : numpy.ndarray
+    x, y : float
+        Coordenadas cartesianas.
     """
 
-    dip = np.atleast_1d(dip)
-    rake = np.atleast_1d(rake)
-    valor_cinematic = np.atleast_1d(valor_cinematic)
-
-    # ---------------------------------------------
-    # Comprobar longitud
-    # ---------------------------------------------
-
-    if not (
-        len(dip)
-        == len(rake)
-        == len(valor_cinematic)
-    ):
-        raise ValueError(
-            "dip, rake y valor_cinematic deben "
-            "tener la misma cantidad de elementos."
-        )
-
-    xs = []
-    ys = []
-
-    for d, r, vc in zip(
+    y = _dip_to_y(
         dip,
         rake,
         valor_cinematic
-    ):
+    )
 
-        y = _dip_to_y(
-            d,
-            r,
-            vc
-        )
+    x = _rake_to_x(
+        dip,
+        rake,
+        valor_cinematic
+    )
 
-        x = _rake_to_x(
-            d,
-            r,
-            vc
-        )
-
-        xs.append(x)
-        ys.append(y)
-
-    return np.array(xs), np.array(ys)
+    return float(x), float(y)
 
 
 def strike_to_xy(strike, r=1.5):
+    """
+    Convierte un strike en coordenadas cartesianas X, Y.
 
-    strike = np.atleast_1d(strike)
+    Parámetros
+    ----------
+    strike : float
+        Orientación del strike en grados.
+        Valor previamente validado por FAULTCORE.
 
-    if np.any((strike < 0) | (strike >= 360)):
-        raise ValueError(
-            "Strike debe estar entre 0 y 360"
-        )
+    r : float, opcional
+        Radio de representación. Por defecto 1.5.
+
+    Returns
+    -------
+    x, y : float
+        Coordenadas cartesianas.
+    """
 
     theta = np.radians(90 - strike)
 
     x = r * np.cos(theta)
     y = r * np.sin(theta)
 
-    return x, y
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    return float(x), float(y)
 
 
 #caso 3
@@ -225,29 +184,33 @@ def transform_N4_caso_3(dip, valor_cinematico):
 
     return [(0, y), (x1, y)]
 
-# puntos dobles
 def transform_N3_caso_1(dip, rake):
-    """
-    Devuelve dos puntos opuestos para N3_caso_1
-    """
 
     if dip is None or rake is None:
         return None
 
-    y1 = 1 - dip / 90
+    y1 = 1.0 - dip / 90.0
     y2 = -y1
 
+    # Único caso donde ambos puntos coinciden en el centro
+    if dip == 90 and rake == 90:
+        return (0.0, 0.0), (0.0, 0.0)
+
+    # Fórmulas originales para X
     x0 = 1.0 - (rake / 90.0)
     x01 = 1.0 - (180.0 - rake) / 90.0
 
     if rake < 90:
         x1, x2 = x0, -x0
+
     elif rake > 90:
         x1, x2 = -x01, x01
-    elif rake == 0:
-        x1 = x2 = 0
+
+    else:
+        x1 = x2 = 0.0
 
     return (x1, y1), (x2, y2)
+
 
 # N3 caso 2
 def transform_N3_case2(dip, valor):
@@ -270,3 +233,105 @@ def transform_N3_case2(dip, valor):
             [(0, y2), (x, y2)]
         )
 
+def center_segment(p1, p2):
+    """
+    Calcula el punto medio de un segmento.
+    """
+    x1, y1 = p1
+    x2, y2 = p2
+
+    xc = (x1 + x2) / 2.0
+    yc = (y1 + y2) / 2.0
+
+    return xc, yc
+
+#CASOS ESPECIALES N2 Y N3
+
+def get_cinematic_point_position(
+        cinematic,
+        radius,
+        offset=0.15,
+        distance_horizontal=0.12,
+        distance_vertical=0.08
+):
+    """
+    Calcula la posición de un punto auxiliar
+    respecto a una etiqueta cinemática.
+
+    DX: derecha
+    SX: izquierda
+    IX: arriba
+    NX: abajo
+    """
+
+    cinematic = str(cinematic).strip().lower()
+
+    positions = {
+        "dx": (radius + offset + distance_horizontal, 0),
+        "sx": (-radius - offset - distance_horizontal, 0),
+        "ix": (0, radius + offset + distance_vertical),
+        "nx": (0, -radius - offset - distance_vertical)
+    }
+
+    return positions.get(cinematic)
+
+
+
+def get_cinematic_pair_point_positions(
+        cine_1,
+        cine_2,
+        radius=1.0,
+        offset=0.15
+):
+    """
+    Calcula las posiciones de dos puntos auxiliares
+    para N3 especial.
+
+    Cada punto se desplaza en la dirección
+    correspondiente a la otra cinemática.
+
+    El orden de cine_1 y cine_2 no altera
+    las posiciones resultantes.
+    """
+
+    cine_1 = str(cine_1).strip().lower()
+    cine_2 = str(cine_2).strip().lower()
+
+    directions = {
+        "dx": (1, 0),
+        "sx": (-1, 0),
+        "ix": (0, 1),
+        "nx": (0, -1)
+    }
+
+    if cine_1 not in directions or cine_2 not in directions:
+        return None
+
+    # Posiciones base de cada etiqueta.
+    base_1 = get_cinematic_point_position(
+        cine_1,
+        radius=radius,
+        offset=0
+    )
+
+    base_2 = get_cinematic_point_position(
+        cine_2,
+        radius=radius,
+        offset=0
+    )
+
+    # Desplazamiento según la otra cinemática.
+    dx_1, dy_1 = directions[cine_2]
+    dx_2, dy_2 = directions[cine_1]
+
+    punto_1 = (
+        base_1[0] + dx_1 * offset,
+        base_1[1] + dy_1 * offset
+    )
+
+    punto_2 = (
+        base_2[0] + dx_2 * offset,
+        base_2[1] + dy_2 * offset
+    )
+
+    return punto_1, punto_2
