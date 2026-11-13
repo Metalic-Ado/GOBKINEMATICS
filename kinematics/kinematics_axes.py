@@ -50,6 +50,15 @@ class KinematicAxes(Axes):
                 "cases": {
                     nivel: {} for nivel in ("N1", "N2", "N3", "N4", "N5")
                 }
+            },
+            "aux": {
+                "general": {},
+                "levels": {
+                    nivel: {} for nivel in ("N1", "N2", "N3", "N4", "N5")
+                },
+                "cases": {
+                    nivel: {} for nivel in ("N1", "N2", "N3", "N4", "N5")
+                }
             }
         }
 
@@ -357,6 +366,43 @@ class KinematicAxes(Axes):
                     if "alpha" in style:
                         artist.set_alpha(style["alpha"])
 
+    def _apply_aux_artist_style(self, artists, **style):
+        """
+        Aplica estilos exclusivamente a los conectores AUX.
+
+        Propiedades admitidas:
+            - color
+            - linewidth
+            - linestyle
+            - alpha
+            - zorder
+
+        No modifica las coordenadas ni la geometría
+        de los conectores.
+        """
+
+        from matplotlib.lines import Line2D
+
+        for artist in artists:
+
+            # AUX está compuesto exclusivamente por líneas
+            if isinstance(artist, Line2D):
+
+                if "color" in style:
+                    artist.set_color(style["color"])
+
+                if "linewidth" in style:
+                    artist.set_linewidth(style["linewidth"])
+
+                if "linestyle" in style:
+                    artist.set_linestyle(style["linestyle"])
+
+                if "alpha" in style:
+                    artist.set_alpha(style["alpha"])
+
+                if "zorder" in style:
+                    artist.set_zorder(style["zorder"])
+
     def _refresh_strike_styles(self):
 
         overrides = self._style_overrides["strike"]
@@ -434,6 +480,52 @@ class KinematicAxes(Axes):
 
                 for artists in grupos:
                     self._apply_fault_artist_style(
+                        artists,
+                        **effective_style
+                    )
+
+    def _refresh_aux_styles(self):
+        """
+        Actualiza los estilos personalizados de AUX.
+
+        Prioridad:
+            1. General
+            2. Nivel
+            3. Subtipo
+
+        No modifica las coordenadas ni la geometría
+        de los conectores.
+        """
+
+        overrides = self._style_overrides["aux"]
+
+        general_style = overrides["general"]
+        level_styles = overrides["levels"]
+        case_styles = overrides["cases"]
+
+        for nivel, subtipos in self._style_artists["aux"].items():
+
+            for subtipo, grupos in subtipos.items():
+
+                # Combinar estilos según su prioridad
+                effective_style = {}
+
+                # 1. Estilo general
+                effective_style.update(general_style)
+
+                # 2. Estilo por nivel
+                effective_style.update(
+                    level_styles[nivel]
+                )
+
+                # 3. Estilo por subtipo
+                effective_style.update(
+                    case_styles[nivel].get(subtipo, {})
+                )
+
+                # Aplicar estilo a cada grupo de conectores
+                for artists in grupos:
+                    self._apply_aux_artist_style(
                         artists,
                         **effective_style
                     )
@@ -518,6 +610,35 @@ class KinematicAxes(Axes):
         """Personaliza los elementos FAULT del nivel N5."""
         self._set_fault_style("N5", caso, **kwargs)
 
+    # ==================================================
+    # PERSONALIZACIÓN DE AUX
+    # ==================================================
+
+    def style_aux(self, **kwargs):
+        """
+        Personaliza todos los conectores AUX.
+        """
+        self._set_aux_style(**kwargs)
+
+    def style_aux_N1(self, caso=None, **kwargs):
+        """Personaliza los conectores AUX del nivel N1."""
+        self._set_aux_style("N1", caso, **kwargs)
+
+    def style_aux_N2(self, caso=None, **kwargs):
+        """Personaliza los conectores AUX del nivel N2."""
+        self._set_aux_style("N2", caso, **kwargs)
+
+    def style_aux_N3(self, caso=None, **kwargs):
+        """Personaliza los conectores AUX del nivel N3."""
+        self._set_aux_style("N3", caso, **kwargs)
+
+    def style_aux_N4(self, caso=None, **kwargs):
+        """Personaliza los conectores AUX del nivel N4."""
+        self._set_aux_style("N4", caso, **kwargs)
+
+    def style_aux_N5(self, caso=None, **kwargs):
+        """Personaliza los conectores AUX del nivel N5."""
+        self._set_aux_style("N5", caso, **kwargs)
 
 
     def _set_fault_style(self, nivel=None, caso=None, **kwargs):
@@ -591,6 +712,77 @@ class KinematicAxes(Axes):
         # ==================================================
 
         self._refresh_fault_styles()
+
+    def _set_aux_style(self, nivel=None, caso=None, **kwargs):
+        """
+        Almacena y actualiza estilos personalizados de AUX.
+
+        nivel=None:
+            Aplica estilo general.
+
+        nivel definido y caso=None:
+            Aplica estilo a todo el nivel.
+
+        caso definido:
+            Aplica estilo a uno o varios subtipos.
+
+        La prioridad de estilos es:
+            General < Nivel < Subtipo.
+        """
+
+        overrides = self._style_overrides["aux"]
+
+        niveles_validos = ("N1", "N2", "N3", "N4", "N5")
+
+        # ==================================================
+        # 1. ESTILO GENERAL
+        # ==================================================
+
+        if nivel is None:
+
+            overrides["general"].update(kwargs)
+
+        # ==================================================
+        # 2. VALIDAR NIVEL
+        # ==================================================
+
+        else:
+
+            if nivel not in niveles_validos:
+                raise ValueError(
+                    f"Nivel no válido: {nivel}. "
+                    f"Niveles permitidos: {niveles_validos}"
+                )
+
+            # ==============================================
+            # 3. ESTILO POR NIVEL
+            # ==============================================
+
+            if caso is None:
+
+                overrides["levels"][nivel].update(kwargs)
+
+            # ==============================================
+            # 4. ESTILO POR SUBTIPO
+            # ==============================================
+
+            else:
+
+                if isinstance(caso, str):
+                    casos = [caso]
+                else:
+                    casos = caso
+
+                for subtipo in casos:
+                    overrides["cases"][nivel].setdefault(
+                        subtipo, {}
+                    ).update(kwargs)
+
+        # ==================================================
+        # 5. ACTUALIZAR ARTISTAS
+        # ==================================================
+
+        self._refresh_aux_styles()
 
     # -------------------------
     # Dibujo de la cruz central
@@ -1945,7 +2137,8 @@ class KinematicAxes(Axes):
             rake,
             cine_1,
             cine_2=None,
-            representation_mode="complete"
+            representation_mode="complete",
+            line_aux=True
     ):
         """
         Representa los registros estructurales procesados por FAULTCORE.
@@ -1963,6 +2156,11 @@ class KinematicAxes(Axes):
         if representation_mode not in ("complete", "compact"):
             raise ValueError(
                 "representation_mode debe ser 'complete' o 'compact'."
+            )
+
+        if not isinstance(line_aux, bool):
+            raise TypeError(
+                "line_aux debe ser True o False."
             )
         # ==================================================
         # 1. PROCESAMIENTO DE DATOS
@@ -2119,32 +2317,37 @@ class KinematicAxes(Axes):
                     )
                 )
 
-                # Registrar las líneas existentes antes del conector
-                lineas_antes = len(self.lines)
+                # ==============================================
+                # CONECTOR STRIKE - CINEMÁTICA
+                # ==============================================
 
-                # Conector strike-cinemática
-                self._draw_connector(
-                    x_strike,
-                    y_strike,
-                    x_kin,
-                    y_kin,
-                    color="black",
-                    linewidth=0.5,
-                    linestyle="--",
-                    alpha=0.25,
-                    zorder=1
-                )
+                if line_aux:
+                    # Registrar las líneas existentes antes del conector
+                    lineas_antes = len(self.lines)
 
-                # Recuperar el conector creado
-                aux_artists = self.lines[lineas_antes:]
+                    # Dibujar el conector
+                    self._draw_connector(
+                        x_strike,
+                        y_strike,
+                        x_kin,
+                        y_kin,
+                        color="black",
+                        linewidth=0.5,
+                        linestyle="--",
+                        alpha=0.25,
+                        zorder=1
+                    )
 
-                # Registrar los elementos de AUX
-                self._register_style_artist(
-                    family="aux",
-                    nivel=nivel,
-                    subtipo=subtipo,
-                    artists=aux_artists
-                )
+                    # Recuperar el conector creado
+                    aux_artists = self.lines[lineas_antes:]
+
+                    # Registrar el elemento AUX
+                    self._register_style_artist(
+                        family="aux",
+                        nivel=nivel,
+                        subtipo=subtipo,
+                        artists=aux_artists
+                    )
 
                 # Punto cinemático
                 fault_artist = self._draw_kinematic_point(
@@ -2232,32 +2435,37 @@ class KinematicAxes(Axes):
                     artist_type="segment"
                 )
 
-                # Registrar las líneas existentes antes del conector
-                lineas_antes = len(self.lines)
+                # ==============================================
+                # CONECTOR STRIKE - CENTRO DEL SEGMENTO N4
+                # ==============================================
 
-                # Conectar el strike con el centro del segmento
-                self._draw_connector(
-                    x_strike,
-                    y_strike,
-                    x_centro,
-                    y_centro,
-                    color="black",
-                    linewidth=0.7,
-                    linestyle="--",
-                    alpha=0.25,
-                    zorder=1
-                )
+                if line_aux:
+                    # Registrar las líneas existentes antes del conector
+                    lineas_antes = len(self.lines)
 
-                # Recuperar el conector creado
-                aux_artists = self.lines[lineas_antes:]
+                    # Conectar el strike con el centro del segmento
+                    self._draw_connector(
+                        x_strike,
+                        y_strike,
+                        x_centro,
+                        y_centro,
+                        color="black",
+                        linewidth=0.7,
+                        linestyle="--",
+                        alpha=0.25,
+                        zorder=1
+                    )
 
-                # Registrar los elementos de AUX
-                self._register_style_artist(
-                    family="aux",
-                    nivel=nivel,
-                    subtipo=subtipo,
-                    artists=aux_artists
-                )
+                    # Recuperar el conector creado
+                    aux_artists = self.lines[lineas_antes:]
+
+                    # Registrar los elementos de AUX
+                    self._register_style_artist(
+                        family="aux",
+                        nivel=nivel,
+                        subtipo=subtipo,
+                        artists=aux_artists
+                    )
 
                 conteo_dibujo["N4_caso_3"] += 1
 
@@ -2320,45 +2528,50 @@ class KinematicAxes(Axes):
                     artists=fault_artists
                 )
 
-                # Registrar las líneas existentes antes de dibujar los conectores
-                lineas_antes = len(self.lines)
+                # ==============================================
+                # CONECTORES STRIKE - PUNTOS GEOMÉTRICOS N3
+                # ==============================================
 
-                # Conectar el strike con el primer punto N3
-                self._draw_connector(
-                    x_strike,
-                    y_strike,
-                    x1,
-                    y1,
-                    color="black",
-                    linewidth=0.7,
-                    linestyle="--",
-                    alpha=0.25,
-                    zorder=1
-                )
+                if line_aux:
+                    # Registrar las líneas existentes antes de dibujar los conectores
+                    lineas_antes = len(self.lines)
 
-                # Conectar el strike con el segundo punto N3
-                self._draw_connector(
-                    x_strike,
-                    y_strike,
-                    x2,
-                    y2,
-                    color="black",
-                    linewidth=0.7,
-                    linestyle="--",
-                    alpha=0.25,
-                    zorder=1
-                )
+                    # Conectar el strike con el primer punto N3
+                    self._draw_connector(
+                        x_strike,
+                        y_strike,
+                        x1,
+                        y1,
+                        color="black",
+                        linewidth=0.7,
+                        linestyle="--",
+                        alpha=0.25,
+                        zorder=1
+                    )
 
-                # Recuperar los dos conectores creados
-                aux_artists = self.lines[lineas_antes:]
+                    # Conectar el strike con el segundo punto N3
+                    self._draw_connector(
+                        x_strike,
+                        y_strike,
+                        x2,
+                        y2,
+                        color="black",
+                        linewidth=0.7,
+                        linestyle="--",
+                        alpha=0.25,
+                        zorder=1
+                    )
 
-                # Registrar los elementos de AUX
-                self._register_style_artist(
-                    family="aux",
-                    nivel=nivel,
-                    subtipo=subtipo,
-                    artists=aux_artists
-                )
+                    # Recuperar los dos conectores creados
+                    aux_artists = self.lines[lineas_antes:]
+
+                    # Registrar los elementos de AUX
+                    self._register_style_artist(
+                        family="aux",
+                        nivel=nivel,
+                        subtipo=subtipo,
+                        artists=aux_artists
+                    )
 
                 conteo_dibujo["N3_caso_1"] += 1
 
@@ -2424,31 +2637,34 @@ class KinematicAxes(Axes):
                 # ----------------------------------------------
                 # 2. Conectar cada centro con el strike
                 # ----------------------------------------------
-                lineas_antes = len(self.lines)
 
-                for x_centro, y_centro in centros_n3:
-                    self._draw_connector(
-                        x_strike,
-                        y_strike,
-                        x_centro,
-                        y_centro,
-                        color="black",
-                        linewidth=0.7,
-                        linestyle="--",
-                        alpha=0.25,
-                        zorder=1
+                if line_aux:
+
+                    lineas_antes = len(self.lines)
+
+                    for x_centro, y_centro in centros_n3:
+                        self._draw_connector(
+                            x_strike,
+                            y_strike,
+                            x_centro,
+                            y_centro,
+                            color="black",
+                            linewidth=0.7,
+                            linestyle="--",
+                            alpha=0.25,
+                            zorder=1
+                        )
+
+                    # Recuperar todos los conectores creados
+                    aux_artists = self.lines[lineas_antes:]
+
+                    # Registrar los elementos de AUX
+                    self._register_style_artist(
+                        family="aux",
+                        nivel=nivel,
+                        subtipo=subtipo,
+                        artists=aux_artists
                     )
-
-                # Recuperar todos los conectores creados
-                aux_artists = self.lines[lineas_antes:]
-
-                # Registrar los elementos de AUX
-                self._register_style_artist(
-                    family="aux",
-                    nivel=nivel,
-                    subtipo=subtipo,
-                    artists=aux_artists
-                )
 
                 # ----------------------------------------------
                 # 3. Registrar representación
@@ -2513,33 +2729,37 @@ class KinematicAxes(Axes):
                 # 2. Conectar ambos puntos con el strike
                 # ----------------------------------------------
 
-                lineas_antes = len(self.lines)
+                # ----------------------------------------------
+                # 2. Conectar ambos puntos con el strike
+                # ----------------------------------------------
 
-                for x_auxiliar, y_auxiliar in puntos_n3:
-                    self._draw_connector(
-                        x_strike,
-                        y_strike,
-                        x_auxiliar,
-                        y_auxiliar,
-                        color="black",
-                        linewidth=0.7,
-                        linestyle="--",
-                        alpha=0.25,
-                        zorder=1
+                if line_aux:
+
+                    lineas_antes = len(self.lines)
+
+                    for x_auxiliar, y_auxiliar in puntos_n3:
+                        self._draw_connector(
+                            x_strike,
+                            y_strike,
+                            x_auxiliar,
+                            y_auxiliar,
+                            color="black",
+                            linewidth=0.7,
+                            linestyle="--",
+                            alpha=0.25,
+                            zorder=1
+                        )
+
+                    # Recuperar los conectores creados
+                    aux_artists = self.lines[lineas_antes:]
+
+                    # Registrar los elementos de AUX
+                    self._register_style_artist(
+                        family="aux",
+                        nivel=nivel,
+                        subtipo=subtipo,
+                        artists=aux_artists
                     )
-
-                # Recuperar los conectores creados
-                aux_artists = self.lines[lineas_antes:]
-
-                # Registrar los elementos de AUX
-                # Registrar los elementos de AUX
-                self._register_style_artist(
-                    family="aux",
-                    nivel=nivel,
-                    subtipo=subtipo,
-                    artists=aux_artists
-                )
-
                 # ----------------------------------------------
                 # 3. Dibujar los dos puntos auxiliares
                 # ----------------------------------------------
@@ -2621,31 +2841,37 @@ class KinematicAxes(Axes):
                     artist_type="segment"
                 )
 
-                lineas_antes = len(self.lines)
+                # ----------------------------------------------
+                # Conectar los centros N2 con el strike
+                # ----------------------------------------------
 
-                for x_centro, y_centro in centros_n2:
-                    self._draw_connector(
-                        x_strike,
-                        y_strike,
-                        x_centro,
-                        y_centro,
-                        color="black",
-                        linewidth=0.7,
-                        linestyle="--",
-                        alpha=0.25,
-                        zorder=1
+                if line_aux:
+
+                    lineas_antes = len(self.lines)
+
+                    for x_centro, y_centro in centros_n2:
+                        self._draw_connector(
+                            x_strike,
+                            y_strike,
+                            x_centro,
+                            y_centro,
+                            color="black",
+                            linewidth=0.7,
+                            linestyle="--",
+                            alpha=0.25,
+                            zorder=1
+                        )
+
+                    # Recuperar todos los conectores creados
+                    aux_artists = self.lines[lineas_antes:]
+
+                    # Registrar los elementos de AUX
+                    self._register_style_artist(
+                        family="aux",
+                        nivel=nivel,
+                        subtipo=subtipo,
+                        artists=aux_artists
                     )
-
-                # Recuperar todos los conectores creados
-                aux_artists = self.lines[lineas_antes:]
-
-                # Registrar los elementos de AUX
-                self._register_style_artist(
-                    family="aux",
-                    nivel=nivel,
-                    subtipo=subtipo,
-                    artists=aux_artists
-                )
 
                 conteo_dibujo["N2"] += 1
 
@@ -2701,31 +2927,37 @@ class KinematicAxes(Axes):
                 # 2. Conectar el punto auxiliar con el strike
                 # ----------------------------------------------
 
-                # Registrar las líneas existentes antes del conector
-                lineas_antes = len(self.lines)
+                # ----------------------------------------------
+                # 2. Conectar el punto auxiliar con el strike
+                # ----------------------------------------------
 
-                self._draw_connector(
-                    x_strike,
-                    y_strike,
-                    x_auxiliar,
-                    y_auxiliar,
-                    color="black",
-                    linewidth=0.7,
-                    linestyle="--",
-                    alpha=0.25,
-                    zorder=1
-                )
+                if line_aux:
+                    # Registrar las líneas existentes antes del conector
+                    lineas_antes = len(self.lines)
 
-                # Recuperar el conector creado
-                aux_artists = self.lines[lineas_antes:]
+                    self._draw_connector(
+                        x_strike,
+                        y_strike,
+                        x_auxiliar,
+                        y_auxiliar,
+                        color="black",
+                        linewidth=0.7,
+                        linestyle="--",
+                        alpha=0.25,
+                        zorder=1
+                    )
 
-                # Registrar los elementos de AUX
-                self._register_style_artist(
-                    family="aux",
-                    nivel=nivel,
-                    subtipo=subtipo,
-                    artists=aux_artists
-                )
+                    # Recuperar el conector creado
+                    aux_artists = self.lines[lineas_antes:]
+
+                    # Registrar los elementos de AUX
+                    self._register_style_artist(
+                        family="aux",
+                        nivel=nivel,
+                        subtipo=subtipo,
+                        artists=aux_artists
+                    )
+
                 # ----------------------------------------------
                 # 3. Dibujar el punto auxiliar
                 # ----------------------------------------------
