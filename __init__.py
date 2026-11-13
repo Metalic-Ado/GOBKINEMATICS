@@ -14,7 +14,7 @@ from .kinematics.kinematics_math import (
 from .kinematics.kinematics_visual import half_circle_marker
 
 
-__version__ = "0.9-dev"
+__version__ = "0.1.0"
 
 
 __all__ = [

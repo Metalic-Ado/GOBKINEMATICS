@@ -1,0 +1,58 @@
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gobkinematics"
+version = "0.1.0"
+description = "A Python library for the graphical representation and kinematic classification of geological faults."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "matplotlib"
+]
+
+authors = [
+    { name = "J. Adonai Pacompia" }
+]
+
+keywords = [
+    "geology",
+    "structural-geology",
+    "kinematics",
+    "geological-faults",
+    "matplotlib"
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering"
+]
+
+[project.optional-dependencies]
+pandas = ["pandas"]
+
+[project.urls]
+Homepage = "https://github.com/Metalic-Ado/GOBKINEMATICS"
+Repository = "https://github.com/Metalic-Ado/GOBKINEMATICS"
+Issues = "https://github.com/Metalic-Ado/GOBKINEMATICS/issues"
+
+[tool.setuptools]
+packages = [
+    "GOBKINEMATICS",
+    "GOBKINEMATICS.faultcore",
+    "GOBKINEMATICS.kinematics"
+]
+
+[tool.setuptools.package-dir]
+GOBKINEMATICS = "."
+"GOBKINEMATICS.faultcore" = "faultcore"
+"GOBKINEMATICS.kinematics" = "kinematics"

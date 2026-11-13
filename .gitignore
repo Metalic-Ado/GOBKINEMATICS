@@ -2,3 +2,11 @@ __pycache__/
 *.pyc
 .venv/
 .idea/
+# Build and distribution files
+build/
+dist/
+*.egg-info/
+
+# Python packaging artifacts
+*.whl
+*.tar.gz
