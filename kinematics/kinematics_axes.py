@@ -41,6 +41,15 @@ class KinematicAxes(Axes):
                 "cases": {
                     nivel: {} for nivel in ("N1", "N2", "N3", "N4", "N5")
                 }
+            },
+            "fault": {
+                "general": {},
+                "levels": {
+                    nivel: {} for nivel in ("N1", "N2", "N3", "N4", "N5")
+                },
+                "cases": {
+                    nivel: {} for nivel in ("N1", "N2", "N3", "N4", "N5")
+                }
             }
         }
 
@@ -72,11 +81,15 @@ class KinematicAxes(Axes):
             family,
             nivel,
             subtipo,
-            artists
+            artists,
+            artist_type=None
     ):
         """
         Registra los artistas gráficos por familia,
         nivel y subtipo.
+
+        artist_type permite identificar automáticamente
+        el tipo de representación gráfica.
         """
 
         if family not in self._style_artists:
@@ -92,6 +105,11 @@ class KinematicAxes(Axes):
         if not isinstance(artists, (list, tuple)):
             artists = [artists]
 
+        # Asignar el tipo de artista cuando se indique
+        if artist_type is not None:
+            for artist in artists:
+                artist._gobkinematics_artist_type = artist_type
+
         # Crear el espacio del subtipo si no existe
         if subtipo not in self._style_artists[family][nivel]:
             self._style_artists[family][nivel][subtipo] = []
@@ -100,7 +118,6 @@ class KinematicAxes(Axes):
         self._style_artists[family][nivel][subtipo].append(
             list(artists)
         )
-
 
     def _apply_strike_artist_style(self, artists, **style):
         """
@@ -174,6 +191,172 @@ class KinematicAxes(Axes):
                         center_y + (base_y - center_y) * factor
                     )
 
+    def _apply_fault_artist_style(self, artists, **style):
+        """
+        Aplica estilos a los artistas de FAULT.
+
+        Tipos admitidos:
+
+        - point:
+            Puntos circulares.
+            Permite modificar marcador, color, tamaño,
+            borde, relleno y transparencia.
+
+        - semicircle:
+            Semicírculos.
+            Permite modificar únicamente color,
+            tamaño y transparencia.
+
+        - segment:
+            Segmentos geométricos.
+            Permite modificar color, grosor,
+            estilo de línea y transparencia.
+
+        Las propiedades no compatibles se ignoran.
+
+        La geometría, posición y orientación
+        de los artistas permanecen protegidas.
+        """
+
+        from matplotlib.collections import PathCollection
+        from matplotlib.lines import Line2D
+        from matplotlib.markers import MarkerStyle
+
+        for artist in artists:
+
+            artist_type = getattr(
+                artist,
+                "_gobkinematics_artist_type",
+                None
+            )
+
+            # ==================================================
+            # 1. POINT: PUNTOS CIRCULARES
+            # ==================================================
+
+            if artist_type == "point":
+
+                # ----------------------------------------------
+                # PathCollection: puntos creados mediante scatter
+                # ----------------------------------------------
+
+                if isinstance(artist, PathCollection):
+
+                    if "color" in style:
+                        artist.set_color(style["color"])
+
+                    if "markersize" in style:
+                        artist.set_sizes([
+                            style["markersize"] ** 2
+                        ])
+
+                    if "marker" in style:
+                        marker = MarkerStyle(style["marker"])
+
+                        artist.set_paths([
+                            marker.get_path().transformed(
+                                marker.get_transform()
+                            )
+                        ])
+
+                    if "markeredgecolor" in style:
+                        artist.set_edgecolor(
+                            style["markeredgecolor"]
+                        )
+
+                    if "markerfacecolor" in style:
+                        artist.set_facecolor(
+                            style["markerfacecolor"]
+                        )
+
+                    if "markeredgewidth" in style:
+                        artist.set_linewidths([
+                            style["markeredgewidth"]
+                        ])
+
+                    if "alpha" in style:
+                        artist.set_alpha(style["alpha"])
+
+                # ----------------------------------------------
+                # Line2D: puntos creados mediante plot
+                # ----------------------------------------------
+
+                elif isinstance(artist, Line2D):
+
+                    if "color" in style:
+                        artist.set_color(style["color"])
+
+                    if "markersize" in style:
+                        artist.set_markersize(
+                            style["markersize"]
+                        )
+
+                    if "marker" in style:
+                        artist.set_marker(
+                            style["marker"]
+                        )
+
+                    if "markeredgecolor" in style:
+                        artist.set_markeredgecolor(
+                            style["markeredgecolor"]
+                        )
+
+                    if "markerfacecolor" in style:
+                        artist.set_markerfacecolor(
+                            style["markerfacecolor"]
+                        )
+
+                    if "markeredgewidth" in style:
+                        artist.set_markeredgewidth(
+                            style["markeredgewidth"]
+                        )
+
+                    if "alpha" in style:
+                        artist.set_alpha(style["alpha"])
+
+            # ==================================================
+            # 2. SEMICIRCLE: SEMICÍRCULOS
+            # ==================================================
+
+            elif artist_type == "semicircle":
+
+                if isinstance(artist, PathCollection):
+
+                    if "color" in style:
+                        artist.set_color(style["color"])
+
+                    if "markersize" in style:
+                        artist.set_sizes([
+                            style["markersize"] ** 2
+                        ])
+
+                    if "alpha" in style:
+                        artist.set_alpha(style["alpha"])
+
+            # ==================================================
+            # 3. SEGMENT: SEGMENTOS GEOMÉTRICOS
+            # ==================================================
+
+            elif artist_type == "segment":
+
+                if isinstance(artist, Line2D):
+
+                    if "color" in style:
+                        artist.set_color(style["color"])
+
+                    if "linewidth" in style:
+                        artist.set_linewidth(
+                            style["linewidth"]
+                        )
+
+                    if "linestyle" in style:
+                        artist.set_linestyle(
+                            style["linestyle"]
+                        )
+
+                    if "alpha" in style:
+                        artist.set_alpha(style["alpha"])
+
     def _refresh_strike_styles(self):
 
         overrides = self._style_overrides["strike"]
@@ -201,6 +384,60 @@ class KinematicAxes(Axes):
                         artists,
                         **effective_style
                     )
+
+    def _refresh_fault_styles(self):
+        """
+        Actualiza los estilos personalizados de FAULT.
+
+        Prioridad:
+            1. General
+            2. Nivel
+            3. Subtipo
+
+        El estilo más específico prevalece.
+
+        No modifica la geometría de los artistas.
+        """
+
+        overrides = self._style_overrides["fault"]
+
+        general_style = overrides["general"]
+        level_styles = overrides["levels"]
+        case_styles = overrides["cases"]
+
+        for nivel, subtipos in self._style_artists["fault"].items():
+
+            for subtipo, grupos in subtipos.items():
+
+                # ----------------------------------------------
+                # Combinar estilos según su prioridad
+                # ----------------------------------------------
+
+                effective_style = {}
+
+                # 1. Estilo general
+                effective_style.update(general_style)
+
+                # 2. Estilo por nivel
+                effective_style.update(
+                    level_styles[nivel]
+                )
+
+                # 3. Estilo por subtipo
+                effective_style.update(
+                    case_styles[nivel].get(subtipo, {})
+                )
+
+                # ----------------------------------------------
+                # Aplicar estilo a cada grupo de artistas
+                # ----------------------------------------------
+
+                for artists in grupos:
+                    self._apply_fault_artist_style(
+                        artists,
+                        **effective_style
+                    )
+
     def _set_strike_style(self, nivel=None, caso=None, **kwargs):
         """
         Almacena y actualiza estilos personalizados de STRIKE.
@@ -253,6 +490,108 @@ class KinematicAxes(Axes):
 
     def style_strike_N5(self, caso=None, **kwargs):
         self._set_strike_style("N5", caso, **kwargs)
+
+    def style_fault(self, **kwargs):
+        """
+        Personaliza todos los elementos geométrico-cinemáticos
+        de FAULT.
+        """
+        self._set_fault_style(**kwargs)
+
+    def style_fault_N1(self, caso=None, **kwargs):
+        """Personaliza los elementos FAULT del nivel N1."""
+        self._set_fault_style("N1", caso, **kwargs)
+
+    def style_fault_N2(self, caso=None, **kwargs):
+        """Personaliza los elementos FAULT del nivel N2."""
+        self._set_fault_style("N2", caso, **kwargs)
+
+    def style_fault_N3(self, caso=None, **kwargs):
+        """Personaliza los elementos FAULT del nivel N3."""
+        self._set_fault_style("N3", caso, **kwargs)
+
+    def style_fault_N4(self, caso=None, **kwargs):
+        """Personaliza los elementos FAULT del nivel N4."""
+        self._set_fault_style("N4", caso, **kwargs)
+
+    def style_fault_N5(self, caso=None, **kwargs):
+        """Personaliza los elementos FAULT del nivel N5."""
+        self._set_fault_style("N5", caso, **kwargs)
+
+
+
+    def _set_fault_style(self, nivel=None, caso=None, **kwargs):
+        """
+        Almacena y actualiza estilos personalizados de FAULT.
+
+        nivel=None:
+            Aplica estilo general.
+
+        nivel definido y caso=None:
+            Aplica estilo a todo el nivel.
+
+        caso definido:
+            Aplica estilo a uno o varios subtipos.
+
+        La prioridad de estilos es:
+            General < Nivel < Subtipo.
+        """
+
+        overrides = self._style_overrides["fault"]
+
+        niveles_validos = ("N1", "N2", "N3", "N4", "N5")
+
+        # ==================================================
+        # 1. ESTILO GENERAL
+        # ==================================================
+
+        if nivel is None:
+
+            overrides["general"].update(kwargs)
+
+        # ==================================================
+        # 2. VALIDAR NIVEL
+        # ==================================================
+
+        else:
+
+            if nivel not in niveles_validos:
+                raise ValueError(
+                    f"Nivel no válido: {nivel}. "
+                    f"Niveles permitidos: {niveles_validos}"
+                )
+
+            # ==============================================
+            # 3. ESTILO POR NIVEL
+            # ==============================================
+
+            if caso is None:
+
+                overrides["levels"][nivel].update(kwargs)
+
+            # ==============================================
+            # 4. ESTILO POR SUBTIPO
+            # ==============================================
+
+            else:
+
+                if isinstance(caso, str):
+                    casos = [caso]
+                else:
+                    casos = caso
+
+                for subtipo in casos:
+
+                    overrides["cases"][nivel].setdefault(
+                        subtipo, {}
+                    ).update(kwargs)
+
+        # ==================================================
+        # 5. ACTUALIZAR ARTISTAS
+        # ==================================================
+
+        self._refresh_fault_styles()
+
     # -------------------------
     # Dibujo de la cruz central
     # -------------------------
@@ -513,12 +852,20 @@ class KinematicAxes(Axes):
         else:
             marker = "o"
 
-        return self.scatter(
+        artist = self.scatter(
             x,
             y,
             marker=marker,
             **kwargs
         )
+
+        # Identificar automáticamente el tipo de artista
+        if marker == "o":
+            artist._gobkinematics_artist_type = "point"
+        else:
+            artist._gobkinematics_artist_type = "semicircle"
+
+        return artist
 
 
     def _draw_strike_point(
@@ -1359,7 +1706,7 @@ class KinematicAxes(Axes):
                 marker1 = kinematics_visual.half_circle_marker(upper=False)
                 marker2 = kinematics_visual.half_circle_marker(upper=True)
 
-            self.scatter(
+            artist1 = self.scatter(
                 x1, y1,
                 marker=marker2,
                 s=50,
@@ -1368,8 +1715,9 @@ class KinematicAxes(Axes):
                 zorder=5,
                 **kwargs
             )
+            artist1._gobkinematics_artist_type = "semicircle"
 
-            self.scatter(
+            artist2 = self.scatter(
                 x2, y2,
                 marker=marker1,
                 s=50,
@@ -1378,9 +1726,10 @@ class KinematicAxes(Axes):
                 zorder=5,
                 **kwargs
             )
+            artist2._gobkinematics_artist_type = "semicircle"
 
         else:
-            self.scatter(
+            artist = self.scatter(
                 [x1, x2],
                 [y1, y2],
                 s=50,
@@ -1389,6 +1738,7 @@ class KinematicAxes(Axes):
                 zorder=5,
                 **kwargs
             )
+            artist._gobkinematics_artist_type = "point"
 
         if conectar_linea:
             self.plot(
@@ -1874,12 +2224,12 @@ class KinematicAxes(Axes):
                 # Recuperar los artistas creados
                 fault_artists = self.lines[lineas_antes:]
 
-                # Registrar los elementos de FAULT
                 self._register_style_artist(
                     family="fault",
                     nivel=nivel,
                     subtipo=subtipo,
-                    artists=fault_artists
+                    artists=fault_artists,
+                    artist_type="segment"
                 )
 
                 # Registrar las líneas existentes antes del conector
@@ -2058,7 +2408,8 @@ class KinematicAxes(Axes):
                     family="fault",
                     nivel=nivel,
                     subtipo=subtipo,
-                    artists=fault_artists
+                    artists=fault_artists,
+                    artist_type="segment"
                 )
 
                 if centros_n3 is None:
@@ -2181,12 +2532,14 @@ class KinematicAxes(Axes):
                 aux_artists = self.lines[lineas_antes:]
 
                 # Registrar los elementos de AUX
+                # Registrar los elementos de AUX
                 self._register_style_artist(
                     family="aux",
                     nivel=nivel,
                     subtipo=subtipo,
                     artists=aux_artists
                 )
+
                 # ----------------------------------------------
                 # 3. Dibujar los dos puntos auxiliares
                 # ----------------------------------------------
@@ -2206,7 +2559,8 @@ class KinematicAxes(Axes):
                     family="fault",
                     nivel=nivel,
                     subtipo=subtipo,
-                    artists=fault_artists
+                    artists=fault_artists,
+                    artist_type="point"
                 )
 
                 # ----------------------------------------------
@@ -2263,7 +2617,8 @@ class KinematicAxes(Axes):
                     family="fault",
                     nivel=nivel,
                     subtipo=subtipo,
-                    artists=fault_artists
+                    artists=fault_artists,
+                    artist_type="segment"
                 )
 
                 lineas_antes = len(self.lines)
@@ -2390,7 +2745,8 @@ class KinematicAxes(Axes):
                     family="fault",
                     nivel=nivel,
                     subtipo=subtipo,
-                    artists=fault_artists
+                    artists=fault_artists,
+                    artist_type="point"
                 )
 
                 # ----------------------------------------------
