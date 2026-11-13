@@ -3,10 +3,7 @@ from matplotlib.projections import register_projection
 from matplotlib.patches import Circle
 import numpy as np
 
-
-from . import kinematics_visual
-from . import kinematics_norm
-from . import kinematics_math
+from . import kinematics_math, kinematics_visual, kinematics_norm
 
 
 
@@ -20,6 +17,32 @@ class KinematicAxes(Axes):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # Registro de artistas para personalización de estilos
+        self._style_artists = {
+            "strike": {
+                nivel: {} for nivel in ("N1", "N2", "N3", "N4", "N5")
+            },
+            "fault": {
+                nivel: {} for nivel in ("N1", "N2", "N3", "N4", "N5")
+            },
+            "aux": {
+                nivel: {} for nivel in ("N1", "N2", "N3", "N4", "N5")
+            }
+        }
+
+        # Configuración de estilos personalizados
+        self._style_overrides = {
+            "strike": {
+                "general": {},
+                "levels": {
+                    nivel: {} for nivel in ("N1", "N2", "N3", "N4", "N5")
+                },
+                "cases": {
+                    nivel: {} for nivel in ("N1", "N2", "N3", "N4", "N5")
+                }
+            }
+        }
 
         # Límites del gráfico
         self.set_xlim(-self.AXIS_LIMIT, self.AXIS_LIMIT)
@@ -44,9 +67,196 @@ class KinematicAxes(Axes):
         self._draw_strike_ring()
         self._draw_limit_square()
 
+    def _register_style_artist(
+            self,
+            family,
+            nivel,
+            subtipo,
+            artists
+    ):
+        """
+        Registra los artistas gráficos por familia,
+        nivel y subtipo.
+        """
+
+        if family not in self._style_artists:
+            raise ValueError(f"Familia gráfica no válida: {family}")
+
+        if nivel not in self._style_artists[family]:
+            raise ValueError(f"Nivel no válido: {nivel}")
+
+        if artists is None:
+            return
+
+        # Normalizar a lista
+        if not isinstance(artists, (list, tuple)):
+            artists = [artists]
+
+        # Crear el espacio del subtipo si no existe
+        if subtipo not in self._style_artists[family][nivel]:
+            self._style_artists[family][nivel][subtipo] = []
+
+        # Guardar el grupo de artistas
+        self._style_artists[family][nivel][subtipo].append(
+            list(artists)
+        )
+
+
+    def _apply_strike_artist_style(self, artists, **style):
+        """
+        Aplica estilos a los artistas de STRIKE.
+
+        Admite:
+        - PathCollection: strike convencional.
+        - Circle + Line2D: símbolo N1.
+
+        Las propiedades no compatibles se ignoran.
+        """
+
+        from matplotlib.collections import PathCollection
+        from matplotlib.patches import Circle
+        from matplotlib.lines import Line2D
+        from matplotlib.markers import MarkerStyle
+
+        for artist in artists:
+
+            # STRIKE convencional: marcador X
+            if isinstance(artist, PathCollection):
+
+                if "color" in style:
+                    artist.set_color(style["color"])
+
+                if "markersize" in style:
+                    artist.set_sizes([style["markersize"] ** 2])
+
+                if "markeredgewidth" in style:
+                    artist.set_linewidths(
+                        [style["markeredgewidth"]]
+                    )
+
+                if "marker" in style:
+                    marker = MarkerStyle(style["marker"])
+                    artist.set_paths([marker.get_path().transformed(
+                        marker.get_transform()
+                    )])
+
+            # Símbolo N1: círculo exterior
+            elif isinstance(artist, Circle):
+
+                if "color" in style:
+                    artist.set_edgecolor(style["color"])
+
+                if "markersize" in style:
+                    base_size = artist._gobkinematics_base_size
+                    factor = style["markersize"] / 6.0
+                    artist.set_radius(base_size * factor)
+
+            # Símbolo N1: X interior
+            # Símbolo N1: X interior
+            elif isinstance(artist, Line2D):
+
+                if "color" in style:
+                    artist.set_color(style["color"])
+
+                if "markersize" in style:
+                    factor = style["markersize"] / 6.0
+
+                    center_x, center_y = artist._gobkinematics_center
+
+                    base_x = artist._gobkinematics_base_xdata
+                    base_y = artist._gobkinematics_base_ydata
+
+                    artist.set_xdata(
+                        center_x + (base_x - center_x) * factor
+                    )
+
+                    artist.set_ydata(
+                        center_y + (base_y - center_y) * factor
+                    )
+
+    def _refresh_strike_styles(self):
+
+        overrides = self._style_overrides["strike"]
+
+        general_style = overrides["general"]
+        level_styles = overrides["levels"]
+        case_styles = overrides["cases"]
+
+        for nivel, subtipos in self._style_artists["strike"].items():
+
+            for subtipo, grupos in subtipos.items():
+
+                # Combinar estilos según su prioridad
+                effective_style = {}
+
+                effective_style.update(general_style)
+                effective_style.update(level_styles[nivel])
+                effective_style.update(
+                    case_styles[nivel].get(subtipo, {})
+                )
+
+                # Aplicar el estilo a cada grupo de artistas
+                for artists in grupos:
+                    self._apply_strike_artist_style(
+                        artists,
+                        **effective_style
+                    )
+    def _set_strike_style(self, nivel=None, caso=None, **kwargs):
+        """
+        Almacena y actualiza estilos personalizados de STRIKE.
+
+        nivel=None: aplica estilo general.
+        nivel definido y caso=None: aplica a todo el nivel.
+        caso definido: aplica al subtipo indicado.
+        """
+
+        overrides = self._style_overrides["strike"]
+
+        # Estilo general
+        if nivel is None:
+            overrides["general"].update(kwargs)
+
+        # Estilo por nivel
+        elif caso is None:
+            overrides["levels"][nivel].update(kwargs)
+
+        # Estilo por subtipo
+        else:
+            if isinstance(caso, str):
+                casos = [caso]
+            else:
+                casos = caso
+
+            for subtipo in casos:
+                overrides["cases"][nivel].setdefault(
+                    subtipo, {}
+                ).update(kwargs)
+
+        # Actualizar los artistas existentes
+        self._refresh_strike_styles()
+
+    def style_strike(self, **kwargs):
+        """Personaliza todos los símbolos STRIKE."""
+        self._set_strike_style(**kwargs)
+
+    def style_strike_N1(self, caso=None, **kwargs):
+        self._set_strike_style("N1", caso, **kwargs)
+
+    def style_strike_N2(self, caso=None, **kwargs):
+        self._set_strike_style("N2", caso, **kwargs)
+
+    def style_strike_N3(self, caso=None, **kwargs):
+        self._set_strike_style("N3", caso, **kwargs)
+
+    def style_strike_N4(self, caso=None, **kwargs):
+        self._set_strike_style("N4", caso, **kwargs)
+
+    def style_strike_N5(self, caso=None, **kwargs):
+        self._set_strike_style("N5", caso, **kwargs)
     # -------------------------
     # Dibujo de la cruz central
     # -------------------------
+
 
     def _draw_cross(self):
         R = self.KINEMATIC_RADIUS
@@ -333,6 +543,7 @@ class KinematicAxes(Axes):
             x,
             y,
             size=0.025,
+            return_artists=False,
             **kwargs
     ):
         """
@@ -369,7 +580,7 @@ class KinematicAxes(Axes):
 
         x_verts = x_verts * size
 
-        self.plot(
+        x_artist = self.plot(
             x + x_verts[:, 0],
             y + x_verts[:, 1],
             color=color,
@@ -377,6 +588,22 @@ class KinematicAxes(Axes):
             linewidth=linewidth,
             zorder=zorder
         )
+        x_artist[0]._gobkinematics_center = (x, y)
+        if return_artists:
+            artists = (circle, x_artist[0])
+
+            for artist in artists:
+                artist._gobkinematics_base_size = size
+
+            x_artist[0]._gobkinematics_base_xdata = (
+                x + x_verts[:, 0]
+            ).copy()
+
+            x_artist[0]._gobkinematics_base_ydata = (
+                y + x_verts[:, 1]
+            ).copy()
+
+            return artists
 
         return circle
 
@@ -1505,12 +1732,19 @@ class KinematicAxes(Axes):
                         nivel == "N1"
                         and subtipo == "solamente_strike"
                 ):
-                    self._draw_strike_point(
+                    strike_artist = self._draw_strike_point(
                         x_strike,
                         y_strike,
                         color="black",
                         alpha=0.6,
                         zorder=4
+                    )
+
+                    self._register_style_artist(
+                        family="strike",
+                        nivel=nivel,
+                        subtipo=subtipo,
+                        artists=strike_artist
                     )
             # ==================================================
             # 6. N5: FALLAS COMPLETAS
@@ -1535,6 +1769,9 @@ class KinematicAxes(Axes):
                     )
                 )
 
+                # Registrar las líneas existentes antes del conector
+                lineas_antes = len(self.lines)
+
                 # Conector strike-cinemática
                 self._draw_connector(
                     x_strike,
@@ -1548,14 +1785,32 @@ class KinematicAxes(Axes):
                     zorder=1
                 )
 
+                # Recuperar el conector creado
+                aux_artists = self.lines[lineas_antes:]
+
+                # Registrar los elementos de AUX
+                self._register_style_artist(
+                    family="aux",
+                    nivel=nivel,
+                    subtipo=subtipo,
+                    artists=aux_artists
+                )
+
                 # Punto cinemático
-                self._draw_kinematic_point(
+                fault_artist = self._draw_kinematic_point(
                     x_kin,
                     y_kin,
                     d,
                     vc,
                     color="red",
                     zorder=4
+                )
+
+                self._register_style_artist(
+                    family="fault",
+                    nivel=nivel,
+                    subtipo=subtipo,
+                    artists=fault_artist
                 )
 
                 conteo_dibujo["N5"] += 1
@@ -1604,6 +1859,9 @@ class KinematicAxes(Axes):
                     p2
                 )
 
+                # Registrar los artistas existentes antes del dibujo
+                lineas_antes = len(self.lines)
+
                 # Representación del segmento N4
                 self.plot_fault_N4_caso_3(
                     dip=d,
@@ -1612,6 +1870,20 @@ class KinematicAxes(Axes):
                     color="purple",
                     alpha=0.7
                 )
+
+                # Recuperar los artistas creados
+                fault_artists = self.lines[lineas_antes:]
+
+                # Registrar los elementos de FAULT
+                self._register_style_artist(
+                    family="fault",
+                    nivel=nivel,
+                    subtipo=subtipo,
+                    artists=fault_artists
+                )
+
+                # Registrar las líneas existentes antes del conector
+                lineas_antes = len(self.lines)
 
                 # Conectar el strike con el centro del segmento
                 self._draw_connector(
@@ -1626,10 +1898,22 @@ class KinematicAxes(Axes):
                     zorder=1
                 )
 
+                # Recuperar el conector creado
+                aux_artists = self.lines[lineas_antes:]
+
+                # Registrar los elementos de AUX
+                self._register_style_artist(
+                    family="aux",
+                    nivel=nivel,
+                    subtipo=subtipo,
+                    artists=aux_artists
+                )
+
                 conteo_dibujo["N4_caso_3"] += 1
 
                 print("  REPRESENTACIÓN: N4 caso 3")
                 continue
+
             # ==================================================
             # 8. N3: CASO 1
             # ==================================================
@@ -1662,12 +1946,32 @@ class KinematicAxes(Axes):
 
                 (x1, y1), (x2, y2) = puntos_n3
 
+
+                # Dibujar los dos puntos N3
+
+                # Registrar las colecciones existentes antes del dibujo # tercera modificacion
+                colecciones_antes = len(self.collections)
+
                 # Dibujar los dos puntos N3
                 self.plot_fault_N3_caso_1(
                     dip=d,
                     rake=r,
                     conectar_linea=False
                 )
+
+                # Recuperar los artistas creados
+                fault_artists = self.collections[colecciones_antes:]
+
+                # Registrar los elementos de FAULT
+                self._register_style_artist(
+                    family="fault",
+                    nivel=nivel,
+                    subtipo=subtipo,
+                    artists=fault_artists
+                )
+
+                # Registrar las líneas existentes antes de dibujar los conectores
+                lineas_antes = len(self.lines)
 
                 # Conectar el strike con el primer punto N3
                 self._draw_connector(
@@ -1693,6 +1997,17 @@ class KinematicAxes(Axes):
                     linestyle="--",
                     alpha=0.25,
                     zorder=1
+                )
+
+                # Recuperar los dos conectores creados
+                aux_artists = self.lines[lineas_antes:]
+
+                # Registrar los elementos de AUX
+                self._register_style_artist(
+                    family="aux",
+                    nivel=nivel,
+                    subtipo=subtipo,
+                    artists=aux_artists
                 )
 
                 conteo_dibujo["N3_caso_1"] += 1
@@ -1724,6 +2039,7 @@ class KinematicAxes(Axes):
                 # ----------------------------------------------
                 # 1. Dibujar los guiones centrales
                 # ----------------------------------------------
+                lineas_antes = len(self.lines)
 
                 centros_n3 = self.plot_fault_N3_caso_2(
                     dip=d,
@@ -1734,6 +2050,15 @@ class KinematicAxes(Axes):
                     linewidth=2,
                     alpha=0.8,
                     zorder=5
+                )
+
+                fault_artists = self.lines[lineas_antes:]
+
+                self._register_style_artist(
+                    family="fault",
+                    nivel=nivel,
+                    subtipo=subtipo,
+                    artists=fault_artists
                 )
 
                 if centros_n3 is None:
@@ -1748,6 +2073,7 @@ class KinematicAxes(Axes):
                 # ----------------------------------------------
                 # 2. Conectar cada centro con el strike
                 # ----------------------------------------------
+                lineas_antes = len(self.lines)
 
                 for x_centro, y_centro in centros_n3:
                     self._draw_connector(
@@ -1761,6 +2087,17 @@ class KinematicAxes(Axes):
                         alpha=0.25,
                         zorder=1
                     )
+
+                # Recuperar todos los conectores creados
+                aux_artists = self.lines[lineas_antes:]
+
+                # Registrar los elementos de AUX
+                self._register_style_artist(
+                    family="aux",
+                    nivel=nivel,
+                    subtipo=subtipo,
+                    artists=aux_artists
+                )
 
                 # ----------------------------------------------
                 # 3. Registrar representación
@@ -1825,6 +2162,8 @@ class KinematicAxes(Axes):
                 # 2. Conectar ambos puntos con el strike
                 # ----------------------------------------------
 
+                lineas_antes = len(self.lines)
+
                 for x_auxiliar, y_auxiliar in puntos_n3:
                     self._draw_connector(
                         x_strike,
@@ -1838,11 +2177,21 @@ class KinematicAxes(Axes):
                         zorder=1
                     )
 
+                # Recuperar los conectores creados
+                aux_artists = self.lines[lineas_antes:]
+
+                # Registrar los elementos de AUX
+                self._register_style_artist(
+                    family="aux",
+                    nivel=nivel,
+                    subtipo=subtipo,
+                    artists=aux_artists
+                )
                 # ----------------------------------------------
                 # 3. Dibujar los dos puntos auxiliares
                 # ----------------------------------------------
 
-                self.plot(
+                fault_artists = self.plot(
                     [x1, x2],
                     [y1, y2],
                     marker="o",
@@ -1851,6 +2200,13 @@ class KinematicAxes(Axes):
                     linestyle="None",
                     alpha=0.9,
                     zorder=5
+                )
+
+                self._register_style_artist(
+                    family="fault",
+                    nivel=nivel,
+                    subtipo=subtipo,
+                    artists=fault_artists
                 )
 
                 # ----------------------------------------------
@@ -1889,6 +2245,8 @@ class KinematicAxes(Axes):
 
                     continue
 
+                lineas_antes = len(self.lines)
+
                 centros_n2 = self.plot_fault_N2_caso_1(
                     dip=d,
                     longitud_guion=0.08,
@@ -1898,6 +2256,17 @@ class KinematicAxes(Axes):
                     alpha=0.8,
                     zorder=5
                 )
+
+                fault_artists = self.lines[lineas_antes:]
+
+                self._register_style_artist(
+                    family="fault",
+                    nivel=nivel,
+                    subtipo=subtipo,
+                    artists=fault_artists
+                )
+
+                lineas_antes = len(self.lines)
 
                 for x_centro, y_centro in centros_n2:
                     self._draw_connector(
@@ -1911,6 +2280,17 @@ class KinematicAxes(Axes):
                         alpha=0.25,
                         zorder=1
                     )
+
+                # Recuperar todos los conectores creados
+                aux_artists = self.lines[lineas_antes:]
+
+                # Registrar los elementos de AUX
+                self._register_style_artist(
+                    family="aux",
+                    nivel=nivel,
+                    subtipo=subtipo,
+                    artists=aux_artists
+                )
 
                 conteo_dibujo["N2"] += 1
 
@@ -1966,6 +2346,9 @@ class KinematicAxes(Axes):
                 # 2. Conectar el punto auxiliar con el strike
                 # ----------------------------------------------
 
+                # Registrar las líneas existentes antes del conector
+                lineas_antes = len(self.lines)
+
                 self._draw_connector(
                     x_strike,
                     y_strike,
@@ -1978,11 +2361,21 @@ class KinematicAxes(Axes):
                     zorder=1
                 )
 
+                # Recuperar el conector creado
+                aux_artists = self.lines[lineas_antes:]
+
+                # Registrar los elementos de AUX
+                self._register_style_artist(
+                    family="aux",
+                    nivel=nivel,
+                    subtipo=subtipo,
+                    artists=aux_artists
+                )
                 # ----------------------------------------------
                 # 3. Dibujar el punto auxiliar
                 # ----------------------------------------------
 
-                self.plot(
+                fault_artists = self.plot(
                     [x_auxiliar],
                     [y_auxiliar],
                     marker="o",
@@ -1991,6 +2384,13 @@ class KinematicAxes(Axes):
                     linestyle="None",
                     alpha=0.9,
                     zorder=5
+                )
+
+                self._register_style_artist(
+                    family="fault",
+                    nivel=nivel,
+                    subtipo=subtipo,
+                    artists=fault_artists
                 )
 
                 # ----------------------------------------------
@@ -2019,18 +2419,20 @@ class KinematicAxes(Axes):
 
             ):
 
-                self._draw_strike_only_marker(
-
+                strike_artists = self._draw_strike_only_marker(
                     x_strike,
-
                     y_strike,
-
                     color="black",
-
                     alpha=0.6,
+                    zorder=4,
+                    return_artists=True
+                )
 
-                    zorder=4
-
+                self._register_style_artist(
+                    family="strike",
+                    nivel=nivel,
+                    subtipo=subtipo,
+                    artists=strike_artists
                 )
 
                 conteo_dibujo["N1"] += 1

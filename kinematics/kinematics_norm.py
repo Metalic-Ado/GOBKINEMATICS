@@ -15,8 +15,7 @@ Este módulo únicamente:
 4. Extrae los campos necesarios para los módulos de representación.
 """
 
-from FAULTCORE.process import process_data
-
+from ..faultcore.process import process_data
 
 # ============================================================
 # 1. PROCESAMIENTO PRINCIPAL
